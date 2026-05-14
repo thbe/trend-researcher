@@ -38,7 +38,7 @@
 ### AI Assessment (AI)
 
 - **AI-001 — Assessment is an explicit run, not a hook.** Assessment runs are triggered separately from ingest (manually from UI or on a schedule), never as a side-effect of a crawl pass.
-- **AI-002 — Local OpenCode runner.** v1 uses a locally invoked OpenCode-style runner for the assessment LLM calls. No hosted-API dependency required to run the PoC.
+- **AI-002 — Pluggable LLM backend via `LLMPort`.** The assessor service defines an `LLMPort` (`complete(messages, model_id, response_schema) -> structured_output`) and provides multiple adapters. v1 ships **at least one local adapter** (Ollama or LMStudio — whichever is preferred during the AI phase) AND **at least one cloud adapter** (Anthropic or OpenAI). Backend choice is env-driven (`LLM_PROVIDER`, `LLM_MODEL`); switching providers requires no code change. The assessor service — not the LLM framework — owns prompt assembly and context selection. No agentic tool-use loop in v1 (see OOS-010).
 - **AI-003 — RAG over Postgres topic store.** The assessment layer queries the topic store (and source references) as its retrieval context. Retrieval strategy is implementation-defined but MUST be documented in the AI phase plan.
 - **AI-004 — Retail-market relevance filter.** For each candidate topic, the assessor produces a binary relevance verdict (`relevant` / `not_relevant`) for the retail market, plus a short reason. Irrelevant topics get a stored verdict but no business case.
 - **AI-005 — Business-case schema (relevant topics only).** Generated business cases include:
@@ -84,13 +84,14 @@
 
 - **OOS-001 — Multi-tenancy.**
 - **OOS-002 — Embeddings / pgvector / vector clustering at ingest.** (Stage 2 RAG may use embeddings internally; Stage 1 dedup must not.)
-- **OOS-003 — LLM-based deduplication.**
+- **OOS-003 — LLM-based deduplication.** Reusing `LLMPort` from the assessor in the crawler is technically possible but explicitly deferred — see ARC-001 / ING-009. Reconsider only if PoC review reveals fuzzy dedup as a primary cause of poor business-case quality.
 - **OOS-004 — Authentication / authorization.** (Internal-only PoC.)
 - **OOS-005 — Multi-market support beyond retail.**
 - **OOS-006 — Normalized cross-source importance scores.** (Per-source native ranking is sufficient for v1.)
 - **OOS-007 — Public-facing UI, SSO, billing, audit logs, SLA work.**
 - **OOS-008 — Per-source crawl-cadence overrides.** (Single global 12h cadence in v1.)
 - **OOS-009 — Authenticated/paid-API sources.** (Notably X trending; deferred until value of public-source v1 is proven.)
+- **OOS-010 — Agentic LLM tool-use loop.** v1 assessment is single-shot: deterministic RAG fetches context, then one LLM call produces the structured business case. The LLM does NOT autonomously query the database or invoke tools.
 
 ---
 
@@ -98,41 +99,41 @@
 
 | REQ-ID    | Title                                | Phase         | Status   |
 | --------- | ------------------------------------ | ------------- | -------- |
-| ING-001   | Periodic crawl scheduler             | _TBD by roadmap_ | proposed |
-| ING-002   | Top-N per source                     | _TBD_         | proposed |
-| ING-003   | Native ranking, no normalization     | _TBD_         | proposed |
-| ING-004   | Initial v1 source set                | _TBD_         | proposed |
-| ING-005   | Public/RSS/unauthenticated only      | _TBD_         | proposed |
-| ING-006   | Source plugin contract               | _TBD_         | proposed |
-| ING-007   | Fuzzy dedup at ingest                | _TBD_         | proposed |
-| ING-008   | Update-on-recrawl semantics          | _TBD_         | proposed |
-| ING-009   | Deterministic, AI-free ingest        | _TBD_         | proposed |
-| STO-001   | PostgreSQL topic store               | _TBD_         | proposed |
-| STO-002   | Topic table shape                    | _TBD_         | proposed |
-| STO-003   | Source references table              | _TBD_         | proposed |
-| STO-004   | Business-case storage                | _TBD_         | proposed |
-| STO-005   | Migrations under version control     | _TBD_         | proposed |
-| STO-006   | Breadth & longevity derivable        | _TBD_         | proposed |
-| AI-001    | Assessment as explicit run           | _TBD_         | proposed |
-| AI-002    | Local OpenCode runner                | _TBD_         | proposed |
-| AI-003    | RAG over Postgres                    | _TBD_         | proposed |
-| AI-004    | Retail-market relevance filter       | _TBD_         | proposed |
-| AI-005    | Business-case schema                 | _TBD_         | proposed |
-| AI-006    | Single seed market: retail           | _TBD_         | proposed |
-| AI-007    | Reproducibility metadata             | _TBD_         | proposed |
-| UI-001    | TS + Vuetify SPA                     | _TBD_         | proposed |
-| UI-002    | Topic browsing view                  | _TBD_         | proposed |
-| UI-003    | Topic detail view                    | _TBD_         | proposed |
-| UI-004    | Crawl-run configuration view         | _TBD_         | proposed |
-| UI-005    | Trigger assessment run               | _TBD_         | proposed |
-| UI-006    | Business-case reading view           | _TBD_         | proposed |
-| OPS-001   | Containerized local run              | _TBD_         | proposed |
-| OPS-002   | Crawl logs                           | _TBD_         | proposed |
-| OPS-003   | Manual back-pressure / pause         | _TBD_         | proposed |
-| ARC-001   | Hard separation invariant            | _TBD_         | proposed |
-| ARC-002   | Externalization-ready seams          | _TBD_         | proposed |
-| ARC-003   | Source-plugin architecture           | _TBD_         | proposed |
-| ARC-004   | Single-operator footprint            | _TBD_         | proposed |
+| ING-001   | Periodic crawl scheduler             | Phase 3          | proposed |
+| ING-002   | Top-N per source                     | Phase 1       | proposed |
+| ING-003   | Native ranking, no normalization     | Phase 1       | proposed |
+| ING-004   | Initial v1 source set                | Phase 2       | proposed |
+| ING-005   | Public/RSS/unauthenticated only      | Phase 1       | proposed |
+| ING-006   | Source plugin contract               | Phase 1       | proposed |
+| ING-007   | Fuzzy dedup at ingest                | Phase 1       | proposed |
+| ING-008   | Update-on-recrawl semantics          | Phase 1       | proposed |
+| ING-009   | Deterministic, AI-free ingest        | Phase 1       | proposed |
+| STO-001   | PostgreSQL topic store               | Phase 1       | proposed |
+| STO-002   | Topic table shape                    | Phase 1       | proposed |
+| STO-003   | Source references table              | Phase 1       | proposed |
+| STO-004   | Business-case storage                | Phase 6       | proposed |
+| STO-005   | Migrations under version control     | Phase 1       | proposed |
+| STO-006   | Breadth & longevity derivable        | Phase 4       | proposed |
+| AI-001    | Assessment as explicit run           | Phase 6       | proposed |
+| AI-002    | Pluggable LLM backend via LLMPort    | Phase 6       | proposed |
+| AI-003    | RAG over Postgres                    | Phase 6       | proposed |
+| AI-004    | Retail-market relevance filter       | Phase 6       | proposed |
+| AI-005    | Business-case schema                 | Phase 7       | proposed |
+| AI-006    | Single seed market: retail           | Phase 6       | proposed |
+| AI-007    | Reproducibility metadata             | Phase 6       | proposed |
+| UI-001    | TS + Vuetify SPA                     | Phase 4       | proposed |
+| UI-002    | Topic browsing view                  | Phase 4       | proposed |
+| UI-003    | Topic detail view                    | Phase 5       | proposed |
+| UI-004    | Crawl-run configuration view         | Phase 5       | proposed |
+| UI-005    | Trigger assessment run               | Phase 8       | proposed |
+| UI-006    | Business-case reading view           | Phase 8       | proposed |
+| OPS-001   | Containerized local run              | Phase 3       | proposed |
+| OPS-002   | Crawl logs                           | Phase 3       | proposed |
+| OPS-003   | Manual back-pressure / pause         | Phase 3       | proposed |
+| ARC-001   | Hard separation invariant            | Phase 1       | proposed |
+| ARC-002   | Externalization-ready seams          | Phase 9       | proposed |
+| ARC-003   | Source-plugin architecture           | Phase 1       | proposed |
+| ARC-004   | Single-operator footprint            | Phase 9       | proposed |
 
 ---
-_Last updated: 2026-05-14_
+_Last updated: 2026-05-14 (roadmap-approval revision: AI-002 LLMPort, OOS-010 added, OOS-003 clarified, phases assigned)_
