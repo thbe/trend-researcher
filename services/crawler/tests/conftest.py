@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from core.models import Base
 
@@ -51,7 +52,7 @@ def db_available() -> bool:
     return _can_reach(dsn)
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def engine() -> AsyncIterator[AsyncEngine]:
     """Session-scoped async engine. Creates schema directly via metadata
     (NOT alembic) so tests stay independent of the migration apply step.
@@ -62,7 +63,10 @@ async def engine() -> AsyncIterator[AsyncEngine]:
     if not db_available():
         pytest.skip("set TEST_DATABASE_URL to a reachable Postgres")
     dsn = _test_database_url() or DEFAULT_TEST_DSN
-    eng = create_async_engine(dsn, future=True)
+    # NullPool: don't reuse connections across pytest-asyncio's per-test
+    # event loops. Sidesteps "attached to a different loop" errors when
+    # the engine is session-scoped but tests get fresh loops.
+    eng = create_async_engine(dsn, future=True, poolclass=NullPool)
     async with eng.begin() as conn:
         # Ensure pgcrypto for gen_random_uuid() on Topic/TopicSource defaults.
         await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pgcrypto")
@@ -75,7 +79,7 @@ async def engine() -> AsyncIterator[AsyncEngine]:
         await eng.dispose()
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(loop_scope="session")
 async def session_factory(engine: AsyncEngine) -> async_sessionmaker:
     """Function-scoped sessionmaker bound to the test engine.
 
@@ -86,14 +90,18 @@ async def session_factory(engine: AsyncEngine) -> async_sessionmaker:
     return async_sessionmaker(engine, expire_on_commit=False)
 
 
-@pytest_asyncio.fixture(autouse=True)
+@pytest_asyncio.fixture(autouse=True, loop_scope="session")
 async def clean_tables(request) -> AsyncIterator[None]:
     """Truncate topics + topic_sources before each repository test.
 
     Only triggers for repository integration tests so unit tests don't
     transitively depend on the engine fixture (and so don't need a DB).
     """
-    if "test_sqlalchemy_topic_repository" not in request.node.nodeid:
+    _DB_TEST_FILES = (
+        "test_sqlalchemy_topic_repository",
+        "test_cross_source_dedup",
+    )
+    if not any(name in request.node.nodeid for name in _DB_TEST_FILES):
         yield
         return
     eng = request.getfixturevalue("engine")
