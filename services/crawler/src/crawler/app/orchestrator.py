@@ -47,6 +47,11 @@ async def run_once(
             "errors": 0,
         },
         "sources": {},
+        # Names of sources whose ``.fetch()`` raised this run, in the order
+        # they were encountered. Counterpart to ``totals.errors`` (which is
+        # just a count). Phase 2 contract: callers can inspect this list to
+        # decide whether to alert / retry on next run.
+        "failed_sources": [],
     }
 
     updated_this_run: set[UUID] = set()
@@ -65,6 +70,7 @@ async def run_once(
             _log.error("source.fetch_failed", source=source.name, error=str(exc))
             src_stats["errors"] += 1
             stats["totals"]["errors"] += 1
+            stats["failed_sources"].append(source.name)
             stats["sources"][source.name] = src_stats
             continue
 
@@ -110,6 +116,7 @@ async def run_once(
         updated=stats["totals"]["updated"],
         skipped_duplicates_within_run=stats["totals"]["skipped_within_run"],
         errors=stats["totals"]["errors"],
+        failed_sources=stats["failed_sources"],
         sources=stats["sources"],
     )
 
