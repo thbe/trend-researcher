@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: ROADMAP.md approved; STATE.md + AGENTS.md created; init commit pending
-last_updated: "2026-05-14T17:00:00.000Z"
-last_activity: 2026-05-14 -- Plan 01-03 complete (crawler ports + domain + dedup)
+last_updated: "2026-05-14T18:30:00.000Z"
+last_activity: 2026-05-14 -- Plan 01-04 complete (HN source + Postgres repository adapters)
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 5
-  completed_plans: 3
-  percent: 33
+  completed_plans: 4
+  percent: 44
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 ## Current Position
 
 Phase: 1 of 9 (Foundation & First Crawl)
-Plan: 3 of 5 in current phase
-Status: Wave 2 complete (01-01 + 01-02 + 01-03); 01-04 ready (wave 3, needs live Postgres)
-Last activity: 2026-05-14 -- Plan 01-03 complete (crawler ports + domain types + dedup, 7 unit tests pass)
+Plan: 4 of 5 in current phase
+Status: Wave 3 part 1 complete (01-04 adapters); 01-05 ready (app + Typer CLI + docker-compose + E2E)
+Last activity: 2026-05-14 -- Plan 01-04 complete (HN source mocked tests pass, repo integration tests skip-gated)
 
-Progress: [██████░░░░] 60%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
