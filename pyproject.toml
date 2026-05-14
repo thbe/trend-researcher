@@ -3,7 +3,18 @@ name = "trend-researcher"
 version = "0.1.0"
 description = "Two-stage internal tool: deterministic Python ingest + AI-driven retail-market assessment over a Postgres topic store."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "core",
+    "crawler",
+    "api",
+    "assessor",
+]
 
 [tool.uv.workspace]
 members = ["services/*", "packages/*"]
+
+[tool.uv.sources]
+core = { workspace = true }
+crawler = { workspace = true }
+api = { workspace = true }
+assessor = { workspace = true }
