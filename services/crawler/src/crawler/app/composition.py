@@ -17,15 +17,31 @@ from crawler.adapters.persistence.sqlalchemy_topic_repository import (
     SqlAlchemyTopicRepository,
 )
 from crawler.adapters.sources.hackernews import HackerNewsSource
+from crawler.adapters.sources.reddit import RedditJsonSource
 from crawler.ports import SourcePort, TopicRepositoryPort
+
+# (source_name, subreddit_slug) — the four Reddit subs we ingest in v1.
+# r/BuyItForLife is the operator-picked retail-adjacent sub.
+_REDDIT_SOURCES: list[tuple[str, str]] = [
+    ("reddit_all", "all"),
+    ("reddit_business", "business"),
+    ("reddit_retail", "retail"),
+    ("reddit_bifl", "BuyItForLife"),
+]
 
 
 def build_sources() -> list[SourcePort]:
     """Return the list of sources the crawler will fan out across.
 
-    Phase 1: HackerNews only. Phase 2 adds Reddit + RSS sources.
+    Phase 1: HackerNews only.
+    Phase 2 (Wave 1): adds 4 Reddit subreddits.
+    Phase 2 (Wave 2): will add 2 RSS sources (NYT homepage, Google News).
     """
-    return [HackerNewsSource()]
+    sources: list[SourcePort] = [HackerNewsSource()]
+    sources.extend(
+        RedditJsonSource(name=name, subreddit=sub) for name, sub in _REDDIT_SOURCES
+    )
+    return sources
 
 
 def build_repository() -> tuple[TopicRepositoryPort, AsyncEngine]:
