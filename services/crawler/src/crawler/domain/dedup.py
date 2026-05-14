@@ -27,13 +27,17 @@ _WHITESPACE_RE = re.compile(r"\s+")
 def dedup_key(title: str) -> str:
     """Normalize a title to a deterministic key for cheap pre-filtering.
 
-    Steps: lowercase, strip non-alphanumerics (keeping spaces),
-    collapse all whitespace to single spaces, trim.
+    Steps: lowercase, normalize all whitespace to single spaces,
+    strip non-alphanumerics (keeping spaces), trim.
+
+    Whitespace normalization happens BEFORE punctuation stripping so that
+    e.g. tabs aren't silently removed (which would glue adjacent words
+    together with no separator).
     """
     lowered = title.lower()
-    no_punct = _NON_ALNUM_RE.sub("", lowered)
-    collapsed = _WHITESPACE_RE.sub(" ", no_punct)
-    return collapsed.strip()
+    spaced = _WHITESPACE_RE.sub(" ", lowered)
+    no_punct = _NON_ALNUM_RE.sub("", spaced)
+    return no_punct.strip()
 
 
 def is_duplicate(
