@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 in progress; Plan 02-02 complete (RSS adapter + 2 feeds registered, build_sources -> 7)
-last_updated: "2026-05-14T20:00:00.000Z"
-last_activity: 2026-05-14 -- Plan 02-02 complete (TDD: 5 RSS adapter tests RED-then-GREEN; nyt_homepage + google_news registered)
+stopped_at: Phase 2 in progress; Plan 02-03 complete (cross-source dedup proven via 3 integration tests + NullPool fixture fix)
+last_updated: "2026-05-14T21:00:00.000Z"
+last_activity: 2026-05-14 -- Plan 02-03 complete (TDD: failed_sources field + cross-source dedup proof + NullPool fixture fix)
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 9
-  completed_plans: 7
-  percent: 29
+  completed_plans: 8
+  percent: 33
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 ## Current Position
 
 Phase: 2 of 9 (Multi-Source Ingest) — IN PROGRESS
-Plan: 2 of 4 complete in current phase (Plan 02-03 next: orchestrator hardening + cross-source dedup proof)
-Status: Plan 02-02 complete — RssSource adapter shipped TDD-style (5 tests RED → impl → GREEN); 2 RSS feeds registered (nyt_homepage, google_news). build_sources() now returns 7 — all sources for Phase 2 are wired. Crawler suite: 21 passed, 4 skipped (DB-gated).
-Last activity: 2026-05-14 -- Plan 02-02 complete (T01 feedparser dep, T02 adapter+5 tests, T03 composition wiring)
+Plan: 3 of 4 complete in current phase (Plan 02-04 next: live multi-source E2E smoke + Phase 2 closeout)
+Status: Plan 02-03 complete — orchestrator failed_sources field shipped TDD (3 unit tests RED → impl → GREEN); cross-source dedup proven by 3 integration tests against real Postgres (no impl change required — the test IS the proof). NullPool fix bundled to resolve a pre-existing per-test-loop fixture race that surfaced when running against the dedicated test DB. Crawler suite: 31 passed (was 24 + 4 skip-gated; the 4 repo tests now run too).
+Last activity: 2026-05-14 -- Plan 02-03 complete (T01 failed_sources, T02 cross-source dedup proof + NullPool fix)
 
-Progress: [███░░░░░░░] 29% (7 of 24 plans across 9 phases — Phase 2 budget = 4 plans, 2/4 done)
+Progress: [████░░░░░░] 33% (8 of 24 plans across 9 phases — Phase 2 budget = 4 plans, 3/4 done)
 
 ## Performance Metrics
 
