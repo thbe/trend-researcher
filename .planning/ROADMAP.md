@@ -48,10 +48,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. Running the HN crawler a second time does NOT create duplicate topic rows — existing rows are updated (last_seen bumped, observation_count incremented, new source ref appended if URL changed)
   6. `SourcePort` (`fetch() -> list[RawItem]`) and `TopicRepositoryPort` exist as documented Python protocols/ABCs in `services/crawler/ports/`; HN and the Postgres repo are the first conforming adapters
   7. No AI/LLM code path exists in any ingest module (verified by grep across `services/crawler/` and `packages/core/`)
-**Plans**: TBD
+**Plans**: 5 (3 waves)
 
 Plans:
-- [ ] 01-01: TBD
+- [ ] 01-01: Monorepo skeleton & uv workspace (Wave 1)
+- [ ] 01-02: Postgres schema, models, Alembic in packages/core (Wave 2)
+- [ ] 01-03: Crawler ports, domain types, dedup (zero I/O) (Wave 2)
+- [ ] 01-04: HN source & Postgres repository adapters (Wave 3)
+- [ ] 01-05: Crawler app, Typer CLI, docker-compose, E2E first crawl (Wave 3)
 
 ### Phase 2: Multi-Source Ingest
 **Goal**: Onboard the remaining v1 sources (Reddit r/all + r/business + r/retail + 1 TBD retail-adjacent sub, NYT homepage RSS, Google News top stories RSS) behind the source-plugin contract from Phase 1. Pick the retail-adjacent subreddit during the phase.
