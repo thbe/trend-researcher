@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: ROADMAP.md approved; STATE.md + AGENTS.md created; init commit pending
-last_updated: "2026-05-14T16:46:25.099Z"
-last_activity: 2026-05-14 -- Phase 1 planning complete
+last_updated: "2026-05-14T17:00:00.000Z"
+last_activity: 2026-05-14 -- Plan 01-03 complete (crawler ports + domain + dedup)
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 5
-  completed_plans: 2
-  percent: 22
+  completed_plans: 3
+  percent: 33
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 ## Current Position
 
 Phase: 1 of 9 (Foundation & First Crawl)
-Plan: 2 of 5 in current phase
-Status: Plans 01-01 + 01-02 complete; 01-03 ready (wave 2 remainder)
-Last activity: 2026-05-14 -- Plan 01-02 complete (core schema, models, alembic, initial migration)
+Plan: 3 of 5 in current phase
+Status: Wave 2 complete (01-01 + 01-02 + 01-03); 01-04 ready (wave 3, needs live Postgres)
+Last activity: 2026-05-14 -- Plan 01-03 complete (crawler ports + domain types + dedup, 7 unit tests pass)
 
-Progress: [████░░░░░░] 40%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
