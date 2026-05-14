@@ -1,0 +1,41 @@
+# Trend Researcher — local stack for Phase 1 walking skeleton.
+# - postgres: long-running data store with healthcheck + named volume
+# - crawler:  one-shot ingest job (no restart policy by design — see ARC-001)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: trend-postgres
+    environment:
+      POSTGRES_USER: trend
+      POSTGRES_PASSWORD: trend
+      POSTGRES_DB: trend_researcher
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "trend", "-d", "trend_researcher"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  crawler:
+    build:
+      context: .
+      dockerfile: services/crawler/Dockerfile
+    image: trend-crawler:dev
+    container_name: trend-crawler
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Inside the compose network postgres resolves by service name.
+      DATABASE_URL: postgresql+asyncpg://trend:trend@postgres:5432/trend_researcher
+      CRAWLER_TOP_N: "100"
+      LOG_FORMAT: json
+    # No restart policy: the crawler is a one-shot job. Re-run with
+    # `docker compose run --rm crawler` or schedule externally (cron/systemd).
+
+volumes:
+  postgres_data:
