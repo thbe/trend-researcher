@@ -10,8 +10,8 @@ progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
-  percent: 11
+  completed_plans: 2
+  percent: 22
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 ## Current Position
 
 Phase: 1 of 9 (Foundation & First Crawl)
-Plan: 1 of 5 in current phase
-Status: Plan 01-01 complete; 01-02/01-03 ready (wave 2)
-Last activity: 2026-05-14 -- Plan 01-01 complete (monorepo skeleton, uv sync resolves all 4 members)
+Plan: 2 of 5 in current phase
+Status: Plans 01-01 + 01-02 complete; 01-03 ready (wave 2 remainder)
+Last activity: 2026-05-14 -- Plan 01-02 complete (core schema, models, alembic, initial migration)
 
-Progress: [██░░░░░░░░] 20%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
