@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: ROADMAP.md approved; STATE.md + AGENTS.md created; init commit pending
-last_updated: "2026-05-14T18:30:00.000Z"
-last_activity: 2026-05-14 -- Plan 01-04 complete (HN source + Postgres repository adapters)
+stopped_at: Phase 1 complete; Phase 2 (Multi-Source Ingest) ready to plan
+last_updated: "2026-05-14T18:00:00.000Z"
+last_activity: 2026-05-14 -- Plan 01-05 complete; Phase 1 complete (E2E smoke green; teardown + greenlet hotfixes shipped)
 progress:
   total_phases: 9
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 4
-  percent: 44
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 
 ## Current Position
 
-Phase: 1 of 9 (Foundation & First Crawl)
-Plan: 4 of 5 in current phase
-Status: Wave 3 part 1 complete (01-04 adapters); 01-05 ready (app + Typer CLI + docker-compose + E2E)
-Last activity: 2026-05-14 -- Plan 01-04 complete (HN source mocked tests pass, repo integration tests skip-gated)
+Phase: 1 of 9 (Foundation & First Crawl) — COMPLETE
+Plan: 5 of 5 in current phase
+Status: Phase 1 complete; E2E smoke passed (N1=30, N2=30, S1=30, S2=60, OC=30); 2 hotfixes shipped (greenlet runtime dep, single-loop teardown). Phase 2 (Multi-Source Ingest) ready to plan.
+Last activity: 2026-05-14 -- Plan 01-05 complete (Typer CLI + Dockerfile + docker-compose + E2E smoke green)
 
-Progress: [████████░░] 80%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
