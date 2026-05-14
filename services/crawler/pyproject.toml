@@ -18,6 +18,9 @@ dev = [
     "pytest-mock>=3.12",
 ]
 
+[project.scripts]
+crawler = "crawler.app.cli:app"
+
 [tool.uv.sources]
 core = { workspace = true }
 
