@@ -46,13 +46,20 @@ def run_once_cmd(
     effective_top_n = (
         top_n if top_n is not None else int(os.getenv("CRAWLER_TOP_N", "100"))
     )
-    sources = build_sources()
-    repo, engine = build_repository()
-    try:
-        stats = asyncio.run(run_once_async(sources, repo, effective_top_n))
-        typer.echo(f"crawl complete: {stats['totals']}")
-    finally:
-        asyncio.run(engine.dispose())
+
+    async def _main() -> dict:
+        # Build inside the loop so the engine's pool binds to *this* loop,
+        # then dispose inside it too — avoids "Event loop is closed" /
+        # "attached to a different loop" tracebacks at shutdown.
+        sources = build_sources()
+        repo, engine = build_repository()
+        try:
+            return await run_once_async(sources, repo, effective_top_n)
+        finally:
+            await engine.dispose()
+
+    stats = asyncio.run(_main())
+    typer.echo(f"crawl complete: {stats['totals']}")
 
 
 if __name__ == "__main__":
