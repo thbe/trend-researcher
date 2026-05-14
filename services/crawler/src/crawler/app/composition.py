@@ -18,6 +18,7 @@ from crawler.adapters.persistence.sqlalchemy_topic_repository import (
 )
 from crawler.adapters.sources.hackernews import HackerNewsSource
 from crawler.adapters.sources.reddit import RedditJsonSource
+from crawler.adapters.sources.rss import RssSource
 from crawler.ports import SourcePort, TopicRepositoryPort
 
 # (source_name, subreddit_slug) — the four Reddit subs we ingest in v1.
@@ -29,17 +30,33 @@ _REDDIT_SOURCES: list[tuple[str, str]] = [
     ("reddit_bifl", "BuyItForLife"),
 ]
 
+# (source_name, feed_url) — RSS / Atom feeds.
+_RSS_SOURCES: list[tuple[str, str]] = [
+    (
+        "nyt_homepage",
+        "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+    ),
+    (
+        "google_news",
+        "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
+    ),
+]
+
 
 def build_sources() -> list[SourcePort]:
     """Return the list of sources the crawler will fan out across.
 
     Phase 1: HackerNews only.
     Phase 2 (Wave 1): adds 4 Reddit subreddits.
-    Phase 2 (Wave 2): will add 2 RSS sources (NYT homepage, Google News).
+    Phase 2 (Wave 2): adds 2 RSS sources (NYT homepage, Google News).
+    Total after Wave 2: 7 sources.
     """
     sources: list[SourcePort] = [HackerNewsSource()]
     sources.extend(
         RedditJsonSource(name=name, subreddit=sub) for name, sub in _REDDIT_SOURCES
+    )
+    sources.extend(
+        RssSource(name=name, feed_url=url) for name, url in _RSS_SOURCES
     )
     return sources
 
