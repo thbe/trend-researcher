@@ -100,13 +100,16 @@ async def clean_tables(request) -> AsyncIterator[None]:
     _DB_TEST_FILES = (
         "test_sqlalchemy_topic_repository",
         "test_cross_source_dedup",
+        "test_sqlalchemy_crawl_run_repository",
     )
     if not any(name in request.node.nodeid for name in _DB_TEST_FILES):
         yield
         return
     eng = request.getfixturevalue("engine")
     async with eng.begin() as conn:
+        # crawl_runs is independent of topics/topic_sources; truncate all so
+        # both Phase 1+2 and Phase 3 integration tests start from a clean slate.
         await conn.exec_driver_sql(
-            "TRUNCATE topic_sources, topics RESTART IDENTITY CASCADE"
+            "TRUNCATE topic_sources, topics, crawl_runs RESTART IDENTITY CASCADE"
         )
     yield
