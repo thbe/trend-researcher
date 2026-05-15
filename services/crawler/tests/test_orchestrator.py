@@ -21,6 +21,7 @@ import pytest
 
 from crawler.app.orchestrator import run_once
 from crawler.domain.raw_item import RawItem
+from crawler.ports.crawl_run_repository_port import CrawlRunRecord
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +93,15 @@ class _FakeRepository:
         self.updates.append((topic_id, item))
 
 
+class _NoopCrawlRunRepo:
+    """No-op crawl_run repo for tests that focus on source-failure isolation,
+    not on the crawl_runs persistence contract (which has its own dedicated
+    test module: test_orchestrator_writes_crawl_run.py)."""
+
+    async def insert(self, record: CrawlRunRecord) -> UUID:  # noqa: ARG002
+        return uuid4()
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -129,7 +139,7 @@ async def test_one_source_failure_does_not_abort_run() -> None:
     ]
     repo = _FakeRepository()
 
-    stats = await run_once(sources, repo, top_n=10)
+    stats = await run_once(sources, repo, _NoopCrawlRunRepo(), top_n=10)
 
     # Both healthy sources executed and their items were inserted.
     assert sources[0].fetch_calls == 1
@@ -160,7 +170,7 @@ async def test_all_sources_succeed_no_failed_sources() -> None:
     ]
     repo = _FakeRepository()
 
-    stats = await run_once(sources, repo, top_n=10)
+    stats = await run_once(sources, repo, _NoopCrawlRunRepo(), top_n=10)
 
     assert "failed_sources" in stats
     assert stats["failed_sources"] == []
@@ -181,7 +191,7 @@ async def test_failed_sources_preserves_order_and_lists_only_failures() -> None:
     ]
     repo = _FakeRepository()
 
-    stats = await run_once(sources, repo, top_n=10)
+    stats = await run_once(sources, repo, _NoopCrawlRunRepo(), top_n=10)
 
     assert stats["failed_sources"] == ["bad_one", "bad_two"]
     assert stats["totals"]["errors"] == 2
