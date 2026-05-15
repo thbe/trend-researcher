@@ -19,7 +19,7 @@ Notes
 from __future__ import annotations
 
 from sqlalchemy import ForeignKey, Index, Integer, Text, UniqueConstraint, text
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -127,4 +127,68 @@ class TopicSource(Base):
     topic: Mapped["Topic"] = relationship(back_populates="sources")
 
 
-__all__ = ["Base", "Topic", "TopicSource"]
+class CrawlRun(Base):
+    """One row per ``crawler run-once`` invocation — operational telemetry.
+
+    Written at the end of :func:`crawler.app.orchestrator.run_once` from the
+    stats dict the orchestrator already computes. Read by the api service via
+    ``GET /runs`` and by ``scripts/smoke_phase3.sh`` to assert that scheduled
+    crawls actually fire (Phase 3, OPS-002).
+
+    No PII / credentials / user content — just counts, timestamps, and the
+    list of sources that failed during the run.
+    """
+
+    __tablename__ = "crawl_runs"
+    __table_args__ = (
+        Index("ix_crawl_runs_started_at", "started_at"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    started_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+    )
+    finished_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+    )
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    top_n: Mapped[int] = mapped_column(Integer, nullable=False)
+    totals_fetched: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    totals_inserted: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    totals_updated: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    totals_skipped_within_run: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    totals_errors: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    per_source: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+    failed_sources: Mapped[list[str]] = mapped_column(
+        ARRAY(Text),
+        nullable=False,
+        server_default=text("'{}'::text[]"),
+    )
+    created_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+
+__all__ = ["Base", "Topic", "TopicSource", "CrawlRun"]
