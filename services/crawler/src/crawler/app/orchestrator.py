@@ -79,7 +79,7 @@ async def run_once(
 
         for item in items:
             key = dedup_key(item.title)
-            candidates = await repo.find_candidates(key, limit=50)
+            candidates = await repo.find_candidates(key, limit=5000)
 
             match_id: UUID | None = None
             for candidate in candidates:

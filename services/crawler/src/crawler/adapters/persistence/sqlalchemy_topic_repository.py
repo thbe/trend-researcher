@@ -29,10 +29,16 @@ class SqlAlchemyTopicRepository:
         self._session_factory = session_factory
 
     async def find_candidates(
-        self, dedup_key: str, limit: int = 50
+        self, dedup_key: str, limit: int = 5000
     ) -> list[TopicCandidate]:
         # Phase 1: recent-window scan. dedup_key is unused here on purpose —
         # the domain layer makes the actual fuzzy match against `title`.
+        # Phase 2 hot-fix (Plan 02-04): default window widened from 50 to
+        # 5000. The old 50 silently dropped any topic older than the 50
+        # most-recent inserts, so on a multi-source crawl a topic ingested
+        # by source A would not be found when source B re-observed it.
+        # 5000 covers the v1 ~thousands-of-topics scale; Phase 3 replaces
+        # this with an indexed lookup on a dedup_key column.
         del dedup_key
         async with self._session_factory() as session:
             stmt = (

@@ -24,7 +24,7 @@ class TopicCandidate:
 
 class TopicRepositoryPort(Protocol):
     async def find_candidates(
-        self, dedup_key: str, limit: int = 50
+        self, dedup_key: str, limit: int = 5000
     ) -> list[TopicCandidate]:
         """Return existing topics that may match the given dedup_key.
 

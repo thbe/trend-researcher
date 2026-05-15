@@ -89,6 +89,46 @@ async def test_update_existing_idempotent_on_unique_violation(session_factory):
     assert match.observation_count == 2
 
 
+async def test_find_candidates_window_exceeds_old_phase1_limit(session_factory):
+    """Regression: dedup must still find a topic when the candidate window
+    contains more than the old hard-coded 50 most-recent rows.
+
+    Phase 1 used limit=50 which silently broke the moment the DB grew past
+    50 topics — older topics fell outside the window and were re-inserted
+    on the next crawl. Plan 02-04 hot-fix widens the default to 5000; this
+    test pins the new behaviour so it can't regress.
+    """
+    repo = SqlAlchemyTopicRepository(session_factory)
+    base = datetime.now(timezone.utc)
+
+    # Insert the target topic FIRST so it has the oldest last_seen_at.
+    target_id = await repo.insert_new(
+        _item(
+            title="Cast iron skillet care guide",
+            url="https://example.com/target",
+            observed_at=base,
+        )
+    )
+
+    # Push the target outside the old 50-row window with 60 newer topics.
+    for i in range(60):
+        await repo.insert_new(
+            _item(
+                title=f"Filler headline number {i}",
+                url=f"https://example.com/filler/{i}",
+                observed_at=base + timedelta(seconds=i + 1),
+            )
+        )
+
+    # With the default limit, the target MUST still appear. Old code with
+    # limit=50 would have dropped it (60 fillers are all more recent).
+    candidates = await repo.find_candidates("cast iron skillet care guide")
+    assert any(c.id == target_id for c in candidates), (
+        "find_candidates default window dropped a topic older than the "
+        "50 most-recent inserts — dedup will silently re-insert duplicates"
+    )
+
+
 async def test_find_candidates_orders_by_last_seen_desc(session_factory):
     repo = SqlAlchemyTopicRepository(session_factory)
     base = datetime.now(timezone.utc)
