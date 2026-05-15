@@ -22,6 +22,10 @@ from uuid import UUID
 import structlog
 
 from crawler.domain.dedup import dedup_key, is_duplicate
+from crawler.ports.crawl_run_repository_port import (
+    CrawlRunRecord,
+    CrawlRunRepositoryPort,
+)
 from crawler.ports.source_port import SourcePort
 from crawler.ports.topic_repository_port import TopicRepositoryPort
 
@@ -29,9 +33,20 @@ _log = structlog.get_logger(__name__)
 
 
 async def run_once(
-    sources: list[SourcePort], repo: TopicRepositoryPort, top_n: int
+    sources: list[SourcePort],
+    repo: TopicRepositoryPort,
+    crawl_run_repo: CrawlRunRepositoryPort,
+    top_n: int,
 ) -> dict[str, Any]:
-    """Run a single crawl across all sources. Returns a stats dict."""
+    """Run a single crawl across all sources. Returns a stats dict.
+
+    At the end of the run (Phase 3, OPS-002), persist a single ``crawl_runs``
+    row capturing started_at/finished_at, totals, per-source stats, and any
+    failed sources. The persist is the last side effect before the
+    ``crawl.complete`` log; if it raises, the orchestrator re-raises (does
+    NOT swallow) so ops telemetry is never silently lost. The new row's id
+    is attached as ``stats['crawl_run_id']``.
+    """
 
     started_at = datetime.now(timezone.utc)
     t0 = perf_counter()
@@ -105,11 +120,41 @@ async def run_once(
         stats["sources"][source.name] = src_stats
 
     duration_ms = int((perf_counter() - t0) * 1000)
-    stats["finished_at"] = datetime.now(timezone.utc).isoformat()
+    finished_at = datetime.now(timezone.utc)
+    stats["finished_at"] = finished_at.isoformat()
     stats["duration_ms"] = duration_ms
+
+    # Persist the crawl_runs row (Phase 3, OPS-002). Built from stats so the
+    # persisted row matches exactly what the orchestrator just logged. On
+    # failure we log + re-raise; we do NOT swallow.
+    record = CrawlRunRecord(
+        started_at=started_at,
+        finished_at=finished_at,
+        duration_ms=duration_ms,
+        top_n=top_n,
+        totals_fetched=stats["totals"]["fetched"],
+        totals_inserted=stats["totals"]["inserted"],
+        totals_updated=stats["totals"]["updated"],
+        totals_skipped_within_run=stats["totals"]["skipped_within_run"],
+        totals_errors=stats["totals"]["errors"],
+        per_source=stats["sources"],
+        failed_sources=stats["failed_sources"],
+    )
+    try:
+        crawl_run_id = await crawl_run_repo.insert(record)
+    except Exception as exc:  # noqa: BLE001 — log + re-raise, do not swallow
+        _log.exception(
+            "crawl_run.persist_failed",
+            error=str(exc),
+            duration_ms=duration_ms,
+            totals=stats["totals"],
+        )
+        raise
+    stats["crawl_run_id"] = str(crawl_run_id)
 
     _log.info(
         "crawl.complete",
+        crawl_run_id=stats["crawl_run_id"],
         duration_ms=duration_ms,
         fetched=stats["totals"]["fetched"],
         inserted=stats["totals"]["inserted"],

@@ -52,16 +52,17 @@ def run_once_cmd(
         # then dispose inside it too — avoids "Event loop is closed" /
         # "attached to a different loop" tracebacks at shutdown.
         sources = build_sources()
-        topic_repo, _crawl_run_repo, engine = build_repository()
-        # _crawl_run_repo is unpacked here (T05) and threaded into the
-        # orchestrator in task T06, which extends run_once_async to accept it.
+        topic_repo, crawl_run_repo, engine = build_repository()
         try:
-            return await run_once_async(sources, topic_repo, effective_top_n)
+            return await run_once_async(
+                sources, topic_repo, crawl_run_repo, effective_top_n
+            )
         finally:
             await engine.dispose()
 
     stats = asyncio.run(_main())
-    typer.echo(f"crawl complete: {stats['totals']}")
+    crawl_run_id = stats.get("crawl_run_id", "<unknown>")
+    typer.echo(f"crawl complete: crawl_run_id={crawl_run_id} totals={stats['totals']}")
 
 
 if __name__ == "__main__":
