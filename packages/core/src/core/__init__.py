@@ -6,12 +6,13 @@ Trend Researcher workspace.
 
 from core.config import Settings, get_settings
 from core.db import get_engine, get_sessionmaker
-from core.models import Base, Topic, TopicSource
+from core.models import Base, CrawlRun, Topic, TopicSource
 
 __version__ = "0.1.0"
 
 __all__ = [
     "Base",
+    "CrawlRun",
     "Settings",
     "Topic",
     "TopicSource",
