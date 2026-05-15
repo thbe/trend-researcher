@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: discussing
-stopped_at: Phase 3 discuss-phase complete; CONTEXT.md written; planning kickoff pending operator gate
-last_updated: "2026-05-15T01:00:00.000Z"
-last_activity: 2026-05-15 -- Phase 3 discuss-phase complete (4 areas locked: cron-in-container scheduler, /healthz+/runs api shell, crawl_runs Postgres table, .env source-disable, smoke+post-close 24h verification)
+status: planning-complete
+stopped_at: Phase 3 planned; 5 plans (03-01..03-05) ready; execution kickoff pending operator gate
+last_updated: "2026-05-16T00:30:00.000Z"
+last_activity: 2026-05-16 -- Phase 3 plan-phase complete (5 vertical slices: crawl_runs+write, api shell, env-disable, scheduler container, smoke+closeout)
 progress:
   total_phases: 9
   completed_phases: 2
-  total_plans: 9
+  total_plans: 14
   completed_plans: 9
   percent: 38
 ---
