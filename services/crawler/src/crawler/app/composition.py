@@ -13,12 +13,15 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from core import get_engine, get_sessionmaker, get_settings
 
+from crawler.adapters.persistence.sqlalchemy_crawl_run_repository import (
+    SqlAlchemyCrawlRunRepository,
+)
 from crawler.adapters.persistence.sqlalchemy_topic_repository import (
     SqlAlchemyTopicRepository,
 )
 from crawler.adapters.sources.hackernews import HackerNewsSource
 from crawler.adapters.sources.rss import RssSource
-from crawler.ports import SourcePort, TopicRepositoryPort
+from crawler.ports import CrawlRunRepositoryPort, SourcePort, TopicRepositoryPort
 
 # Reddit JSON adapter is kept in tree (crawler.adapters.sources.reddit) but is
 # NOT registered here. Plan 02-04 live smoke confirmed Reddit's Cloudflare WAF
@@ -61,17 +64,22 @@ def build_sources() -> list[SourcePort]:
     return sources
 
 
-def build_repository() -> tuple[TopicRepositoryPort, AsyncEngine]:
-    """Build the topic repository plus its underlying engine.
+def build_repository() -> tuple[
+    TopicRepositoryPort, CrawlRunRepositoryPort, AsyncEngine
+]:
+    """Build the persistence adapters plus the underlying engine.
 
-    The engine is returned alongside the repository so the caller (typically
-    the CLI) can dispose of it cleanly after the crawl finishes.
+    Returns the topic repository, the crawl-run repository, and the engine
+    itself. The engine is returned so the caller (typically the CLI) can
+    dispose of it cleanly after the crawl finishes. Both repositories share
+    the same session factory and engine.
     """
     settings = get_settings()
     engine = get_engine(settings.database_url)
     session_factory = get_sessionmaker(engine)
-    repo = SqlAlchemyTopicRepository(session_factory)
-    return repo, engine
+    topic_repo = SqlAlchemyTopicRepository(session_factory)
+    crawl_run_repo = SqlAlchemyCrawlRunRepository(session_factory)
+    return topic_repo, crawl_run_repo, engine
 
 
 __all__ = ["build_sources", "build_repository"]

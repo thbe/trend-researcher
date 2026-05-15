@@ -52,9 +52,11 @@ def run_once_cmd(
         # then dispose inside it too — avoids "Event loop is closed" /
         # "attached to a different loop" tracebacks at shutdown.
         sources = build_sources()
-        repo, engine = build_repository()
+        topic_repo, _crawl_run_repo, engine = build_repository()
+        # _crawl_run_repo is unpacked here (T05) and threaded into the
+        # orchestrator in task T06, which extends run_once_async to accept it.
         try:
-            return await run_once_async(sources, repo, effective_top_n)
+            return await run_once_async(sources, topic_repo, effective_top_n)
         finally:
             await engine.dispose()
 
