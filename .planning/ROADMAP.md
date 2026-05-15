@@ -23,8 +23,8 @@ The hard architectural rule throughout: **Stage 1 ingest stays AI-free and deter
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation & First Crawl** - Repo skeleton, Postgres schema, dedup, and one working crawler (HN) writing to DB
-- [ ] **Phase 2: Multi-Source Ingest** - Plug in remaining v1 sources behind the source-plugin contract
+- [x] **Phase 1: Foundation & First Crawl** - Repo skeleton, Postgres schema, dedup, and one working crawler (HN) writing to DB
+- [x] **Phase 2: Multi-Source Ingest** - Plug in remaining v1 sources behind the source-plugin contract
 - [ ] **Phase 3: Scheduler & Ops Baseline** - 12h periodic runs, structured logs, single-command docker-compose
 - [ ] **Phase 4: Topic API & UI Shell** - Backend read API + Vuetify SPA with sortable topic list (breadth/longevity)
 - [ ] **Phase 5: Topic Detail & Crawl Config UI** - Topic detail view with sources + per-source enable/N control
@@ -51,11 +51,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 5 (3 waves)
 
 Plans:
-- [ ] 01-01: Monorepo skeleton & uv workspace (Wave 1)
-- [ ] 01-02: Postgres schema, models, Alembic in packages/core (Wave 2)
-- [ ] 01-03: Crawler ports, domain types, dedup (zero I/O) (Wave 2)
-- [ ] 01-04: HN source & Postgres repository adapters (Wave 3)
-- [ ] 01-05: Crawler app, Typer CLI, docker-compose, E2E first crawl (Wave 3)
+- [x] 01-01: Monorepo skeleton & uv workspace (Wave 1)
+- [x] 01-02: Postgres schema, models, Alembic in packages/core (Wave 2)
+- [x] 01-03: Crawler ports, domain types, dedup (zero I/O) (Wave 2)
+- [x] 01-04: HN source & Postgres repository adapters (Wave 3)
+- [x] 01-05: Crawler app, Typer CLI, docker-compose, E2E first crawl (Wave 3)
 
 ### Phase 2: Multi-Source Ingest
 **Goal**: Onboard the remaining v1 sources (Reddit r/all + r/business + r/retail + 1 TBD retail-adjacent sub, NYT homepage RSS, Google News top stories RSS) behind the source-plugin contract from Phase 1. Pick the retail-adjacent subreddit during the phase.
@@ -68,8 +68,15 @@ Plans:
   3. Cross-source deduplication works: a story that appears on both NYT and Google News collapses to a single topic with two source refs
   4. Each source's native ranking (`native_rank`) is preserved per source — no cross-source normalization is performed
 
+**Phase 2 reality (post-execution):** ships **3 sources** (HN + NYT homepage + Google News), not 7. Reddit's anonymous endpoints (both `/.json` and `/.rss`) return HTTP 403 to `httpx` from datacenter IPs regardless of User-Agent — the WAF fingerprints the TLS / HTTP-client stack. Plain `curl` from the same network gets 200, and `httpx` from a residential IP also gets 200, so the adapter works for the operator locally but is incompatible with future scheduled deployment without OAuth. The 4 `RedditJsonSource` adapter file is kept in tree (still has unit tests) but is NOT registered in `build_sources()`. Reddit OAuth is parked as Phase 3+ follow-up. Full analysis in `.planning/phases/02-multi-source-ingest/CONTEXT.md` "Reddit access reality" + `SMOKE-RESULTS.md`.
+
+**Phase 2 in-flight bug fix:** Plan 02-04 also discovered and shipped a hot-fix for `find_candidates` (recent-window scan default `limit` 50 → 5000). Phase 1's 50-row window silently broke the moment the DB grew past 50 topics. The proper fix (indexed `dedup_key` column lookup) is parked for Phase 3.
+
 Plans:
-- [ ] 02-01: TBD
+- [x] 02-01: Reddit JSON adapter (Wave 1) — adapter shipped + tested; later unregistered in 02-04 (kept in tree)
+- [x] 02-02: RSS adapter + NYT/Google News registration (Wave 2)
+- [x] 02-03: Orchestrator failed_sources field + cross-source dedup proof (Wave 3)
+- [x] 02-04: Live E2E smoke + hot-fixes (dedup window 50→5000, Reddit drop) + closeout (Wave 4)
 
 ### Phase 3: Scheduler & Ops Baseline
 **Goal**: Move from "manual crawl invocation" to "runs itself every 12 hours" via an external scheduler invoking the crawler as a one-shot job. Add the operational baseline needed to leave it running unattended for the PoC observation window.
@@ -185,8 +192,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & First Crawl | 0/TBD | Not started | - |
-| 2. Multi-Source Ingest | 0/TBD | Not started | - |
+| 1. Foundation & First Crawl | 5/5 | Complete | 2026-05-14 |
+| 2. Multi-Source Ingest | 4/4 | Complete | 2026-05-15 |
 | 3. Scheduler & Ops Baseline | 0/TBD | Not started | - |
 | 4. Topic API & UI Shell | 0/TBD | Not started | - |
 | 5. Topic Detail & Crawl Config UI | 0/TBD | Not started | - |

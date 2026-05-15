@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 2 in progress; Plan 02-03 complete (cross-source dedup proven via 3 integration tests + NullPool fixture fix)
-last_updated: "2026-05-14T21:00:00.000Z"
-last_activity: 2026-05-14 -- Plan 02-03 complete (TDD: failed_sources field + cross-source dedup proof + NullPool fixture fix)
+status: phase-complete
+stopped_at: Phase 2 complete (4/4 plans); Phase 3 ready to plan
+last_updated: "2026-05-15T00:00:00.000Z"
+last_activity: 2026-05-15 -- Plan 02-04 complete (live E2E smoke GREEN, dedup window hot-fix 50→5000, Reddit dropped from v1 due to WAF, README + closeout)
 progress:
   total_phases: 9
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 9
-  completed_plans: 8
-  percent: 33
+  completed_plans: 9
+  percent: 38
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-14)
 
 **Core value:** Two-stage trend pipeline (deterministic Python crawler + AI assessment) that surfaces retail-relevant trends with actionable business cases, early enough to react.
-**Current focus:** Phase 2 — Multi-Source Ingest
+**Current focus:** Phase 3 — Scheduler & Ops Baseline (next to plan)
 
 ## Current Position
 
-Phase: 2 of 9 (Multi-Source Ingest) — IN PROGRESS
-Plan: 3 of 4 complete in current phase (Plan 02-04 next: live multi-source E2E smoke + Phase 2 closeout)
-Status: Plan 02-03 complete — orchestrator failed_sources field shipped TDD (3 unit tests RED → impl → GREEN); cross-source dedup proven by 3 integration tests against real Postgres (no impl change required — the test IS the proof). NullPool fix bundled to resolve a pre-existing per-test-loop fixture race that surfaced when running against the dedicated test DB. Crawler suite: 31 passed (was 24 + 4 skip-gated; the 4 repo tests now run too).
-Last activity: 2026-05-14 -- Plan 02-03 complete (T01 failed_sources, T02 cross-source dedup proof + NullPool fix)
+Phase: 2 of 9 COMPLETE → Phase 3 ready to plan
+Plan: 4 of 4 complete in Phase 2
+Status: Phase 2 complete. Ships 3 sources (HN + NYT homepage + Google News), not the originally planned 7. Reddit dropped from v1 — anonymous endpoints (both `/.json` and `/.rss`) return 403 to `httpx` from datacenter IPs regardless of UA (TLS/HTTP-client fingerprinting at the WAF). RedditJsonSource adapter kept in tree but unregistered. Plan 02-04 also shipped a dedup hot-fix (`find_candidates` window 50→5000 across port + repo + orchestrator) — Phase 1's 50-row window broke silently the moment the DB grew past 50 topics. Live E2E smoke (`scripts/smoke_phase2.sh`) all 6 criteria GREEN: first crawl inserted=89/updated=0/errors=0/failed_sources=[]; second crawl inserted=0/updated=89; topics stable at 89; all at observation_count=2; S2=2·S1 per source. 32 unit/integration tests pass with TEST_DATABASE_URL.
+Last activity: 2026-05-15 -- Plan 02-04 complete (T01 README, T02a dedup hot-fix, T02b/c Reddit drop, T02d live smoke green, T03 7-check verification, T04 closeout)
 
-Progress: [████░░░░░░] 33% (8 of 24 plans across 9 phases — Phase 2 budget = 4 plans, 3/4 done)
+Progress: [████░░░░░░] 38% (9 of 24 plans across 9 phases — Phase 2 budget = 4 plans, 4/4 done; Phase 1 = 5/5 done)
 
 ## Performance Metrics
 
@@ -71,7 +71,8 @@ None yet.
 ### Blockers/Concerns
 
 - **Tooling degradation:** GSD agents not installed (gsd-planner, gsd-executor, gsd-verifier, etc.) and no search providers configured. Workflow preferences `research_depth=deep`, `plan_checking=on`, `verifier=on` are saved but currently no-op. Run `npx get-shit-done-cc@latest --global` to activate.
-- **Phase 2 open question:** which retail-adjacent subreddit to add (e.g., `r/Entrepreneur`) — decide during Phase 2 planning.
+- **Phase 2 Reddit drop:** Reddit anonymous endpoints incompatible with `httpx` from datacenter IPs (Cloudflare WAF fingerprints TLS/HTTP-client). v1 ships HN + NYT homepage + Google News only; Reddit OAuth deferred to Phase 3+
+- **Phase 2 dedup hot-fix:** `find_candidates` window 50→5000 (port + repo + orchestrator). Phase 1's 50-row default broke the moment topic count exceeded 50. Proper fix (indexed `dedup_key` column) parked for Phase 3
 
 ## Deferred Items
 
@@ -83,6 +84,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-14
-Stopped at: ROADMAP.md approved; STATE.md + AGENTS.md created; init commit pending
+Last session: 2026-05-15
+Stopped at: Phase 2 complete (4/4 plans). Phase 3 (Scheduler & Ops Baseline) ready to plan via `/gsd-plan-phase 3`
 Resume file: None
