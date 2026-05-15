@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "phase_number": 3,
+  "phase_slug": "scheduler-ops-baseline",
+  "phase_dir": ".planning/phases/03-scheduler-ops-baseline",
+  "status": "discussed",
+  "discuss_mode": "discuss",
+  "completed_at": "2026-05-15",
+  "areas_selected": ["A", "B", "C", "D"],
+  "areas_deferred": ["E", "F"],
+  "decisions": {
+    "A.1_scheduler_mechanism": "cron-in-its-own-tiny-container (alpine + crond, mounted docker socket)",
+    "A.2_api_shell_scope": "FastAPI /healthz + /runs (last N crawl_runs rows)",
+    "B_log_sink": "crawl_runs Postgres table via Alembic in packages/core",
+    "C_source_disable": "CRAWLER_DISABLED_SOURCES env var, parsed at container startup, build_sources() filters",
+    "D_24h_verification": "scripts/smoke_phase3.sh (3 triggers) closes phase + post-close real-cron observation in PoC log; Phase 3.1 hot-fix if cron fails"
+  },
+  "boundaries_reaffirmed": [
+    "ARC-001: no AI in ingest",
+    "ING-001: 12h global cadence",
+    "OOS-008: no per-source cadence",
+    "Phase 5 owns crawl_config table (NOT pulled forward)",
+    "find_candidates indexed-lookup (Phase 2 hand-off): deferred, not in Phase 3 REQ-IDs",
+    "Reddit OAuth re-enable: backlog"
+  ],
+  "next_step": "confirm_creation (operator gate: route to /gsd-plan-phase 3 to begin planning)",
+  "artifacts_written": [
+    ".planning/phases/03-scheduler-ops-baseline/CONTEXT.md",
+    ".planning/phases/03-scheduler-ops-baseline/DISCUSSION-LOG.md",
+    ".planning/phases/03-scheduler-ops-baseline/DISCUSS-CHECKPOINT.json"
+  ]
+}
