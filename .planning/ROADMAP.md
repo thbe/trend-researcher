@@ -115,7 +115,10 @@ Plans:
 - [ ] 04-02 (W2, deps: 04-01): `/api/*` re-prefix + `GET /api/topics` list endpoint (sort whitelist + limit) + tests
 - [ ] 04-03 (W3, deps: 04-02): `GET /api/topics/{id}` detail endpoint + nested sources + tests
 - [ ] 04-04 (W4, deps: 04-03): Vuetify 3 SPA scaffold at `web/` (TopicList + TopicDetail + Vite proxy + formatLongevity + thbe brand palette)
-- [ ] 04-05 (W5, deps: 04-04, **autonomous=false**): api Dockerfile multi-stage (node+python) + StaticFiles mount + `scripts/smoke_phase4.sh` + README + SUMMARY
+- [ ] 04-05 (W5, deps: 04-04, **autonomous=false**): Ubuntu+PG-16 3-stage Dockerfile + docker-entrypoint.sh + `scripts/pg-dump-rotate.sh` + StaticFiles mount + dump-debouncer middleware + `scripts/smoke_phase4.sh` (local + prod-image modes) + README + SUMMARY
+- [ ] 04-06 (W6, deps: 04-05, **autonomous=false**): PAT-secured `POST /api/internal/crawl` + DELETE `services/scheduler/` tree + drop scheduler from compose + `cloudbuild.yaml` (Cloud Run + GCS-FUSE + Secret Manager) + `.env.example` + PAT tests + `CLOUD-RUN-DEPLOY.md` + first Cloud Run deploy + closeout
+
+**Phase 4 amendment (2026-05-16, post-plan / pre-execute):** production target locked to single-container Cloud Run + GCS-FUSE dump-sync + PAT-secured cron API, adopting the `food-assistant` sibling-repo pattern verbatim. Plan shape grew from 5 → 6 plans (04-05 rewritten; 04-06 added). `services/scheduler/` deleted in-phase (replaced by Cloud Scheduler → `/api/internal/crawl`). Locked decisions G9 (30 s debounce + 3-slot ring + `pg_restore --list` verify), G10 (GCP Secret Manager → `TREND_INTERNAL_PAT`, `hmac.compare_digest`, fail-closed 503), G11 (scheduler-deletion same phase). See `.planning/phases/04-topic-api-ui-shell/DISCUSSION-LOG.md` amendment section + `CONTEXT.md` amendment block.
 
 ### Phase 5: Topic Detail & Crawl Config UI
 **Goal**: Make individual topics inspectable (sources, raw payloads where relevant) and let the operator manage crawl scope — enable/disable sources and tune per-source `N` — from the UI without editing config files. Introduces the `crawl_config` Postgres table as the single source of truth for mutable crawl settings.
@@ -205,7 +208,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Foundation & First Crawl | 5/5 | Complete | 2026-05-14 |
 | 2. Multi-Source Ingest | 4/4 | Complete | 2026-05-15 |
 | 3. Scheduler & Ops Baseline | 5/5 | Complete | 2026-05-16 |
-| 4. Topic API & UI Shell | 0/TBD | Not started | - |
+| 4. Topic API & UI Shell | 0/6 | Planned (amended: +04-06 for Cloud Run deploy) | - |
 | 5. Topic Detail & Crawl Config UI | 0/TBD | Not started | - |
 | 6. AI Assessment Foundation | 0/TBD | Not started | - |
 | 7. Business-Case Generation | 0/TBD | Not started | - |

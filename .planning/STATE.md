@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-planned
-stopped_at: Phase 4 planned (5 plans across 5 waves, brand palette folded into 04-04); plan-checker self-verify PASS; ready for /gsd-execute-phase 4
-last_updated: "2026-05-16T14:15:00.000Z"
-last_activity: 2026-05-16 -- Phase 4 plan-phase complete (5 PLAN.md files written, thbe brand palette applied to 04-04+04-UI-SPEC, inline plan-checker self-verify PASS on all 11 gates)
+status: phase-amending
+stopped_at: Phase 4 architecture amendment in progress — pivot to single-container Cloud Run + GCS dump-sync + PAT-secured cron API (food-assistant pattern). G1-G8 preserved; G9 (dump cadence), G10 (PAT secret), G11 (scheduler deletion) resolved. 04-01..04-04 plans unchanged. 04-05 being rewritten. 04-06 new (scheduler deletion + PAT + /api/internal/crawl + cloudbuild.yaml). Plan-checker re-verify pending on 04-05 + 04-06.
+last_updated: "2026-05-16T15:30:00.000Z"
+last_activity: 2026-05-16 -- Phase 4 amendment cycle (G9-G11 locked, CONTEXT + DISCUSSION-LOG amended, 04-05 rewrite + 04-06 add in flight)
 progress:
   total_phases: 9
   completed_phases: 3
-  total_plans: 19
+  total_plans: 20
   completed_plans: 14
-  percent: 44
+  percent: 42
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-14)
 
 **Core value:** Two-stage trend pipeline (deterministic Python crawler + AI assessment) that surfaces retail-relevant trends with actionable business cases, early enough to react.
-**Current focus:** Phase 4 — Topic API & UI Shell (planned; 5 plans, 5 waves; ready for execute)
+**Current focus:** Phase 4 — Topic API & UI Shell (amending; pivot to single-container Cloud Run + GCS dump-sync + PAT-secured cron API; 6 plans across 6 waves after amendment)
 
 ## Current Position
 
-Phase: 3 of 9 — COMPLETE
-Plan: 5 of 5 in Phase 3
-Status: Phase 3 execute-phase complete. All 5 plans shipped: 03-01 crawl_runs table + writer (8 tasks), 03-02 FastAPI api shell with /healthz + /runs (7 tasks), 03-03 CRAWLER_DISABLED_SOURCES env filter (3 tasks), 03-04 scheduler service (alpine + crond + docker-cli) + 4-service compose (5 tasks), 03-05 smoke + closeout (5 tasks). Live 3-trigger E2E smoke green on 2026-05-16 10:42 UTC: 77 topics ingested then 2× updated, 3 crawl_runs rows written, /healthz ok, /runs returns 3, scheduler crontab loaded. One in-flight hot-fix (700533e) narrowed the uv workspace glob to skip services/scheduler (alpine-only, no pyproject.toml). The single non-autonomous gate left is `git push origin main` (32+ commits queued); push will be performed at operator confirmation. Post-close 24h real-cron observation is captured as an empty section in .planning/phases/03-scheduler-ops-baseline/SMOKE-RESULTS.md for the operator to fill in after the next two scheduled tick windows.
-Last activity: 2026-05-16 -- Phase 3 execute-phase complete (Plans 03-01..03-05 shipped; smoke green; awaiting push gate)
+Phase: 4 of 9 — AMENDING
+Plan: amendment in progress (04-05 rewrite + 04-06 add). 04-01..04-04 unchanged from prior plan-phase pass.
+Status: Architecture pivot mid-flight. Operator surfaced production deployment shape (Cloud Run + GCS volume + PAT-cron) during execute-phase kickoff Wave 1. Sibling repo `../food-assistant/` ships the pattern in production; adopted verbatim. G1-G8 design contract preserved. G9 (30s debounce + on-shutdown dump + 3-slot ring + pg_restore --list verify), G10 (GCP Secret Manager → env var, hmac.compare_digest, fail-closed 503), G11 (delete services/scheduler/ in same phase) locked in CONTEXT.md amendment block. Plans 04-01..04-04 tasks unchanged. 04-05 rewritten: Ubuntu+PG-16 runtime, docker-entrypoint.sh port from food-assistant, scripts/pg-dump-rotate.sh verbatim port, FastAPI dump-debouncer middleware. 04-06 new: PAT middleware (HTTPBearer + constant-time), POST /api/internal/crawl (in-process call to crawler.app.orchestrator.run_once via BackgroundTasks), delete services/scheduler/ tree, drop from compose, cloudbuild.yaml (port of food-assistant verbatim, renamed). Tests location locked: colocated under packages/core/tests/ + services/*/tests/ (uv workspace idiomatic). Both operator-gated tasks (04-05 T05 smoke, 04-06 T05 first Cloud Run deploy) flagged. Plan-checker re-verify pending on amended 04-05 + new 04-06 before amendment commit.
+Last activity: 2026-05-16 -- Phase 4 amendment in flight (DISCUSSION-LOG + CONTEXT amended; STATE flipped; 04-05 rewrite + 04-06 add next)
 
-Progress: [██████░░░░] 58% (14 of 24 plans across 9 phases — Phase 1 = 5/5, Phase 2 = 4/4, Phase 3 = 5/5; Phases 4-9 still TBD)
+Progress: [██████░░░░] 42% (14 of ~33 plans — Phase 1=5/5, Phase 2=4/4, Phase 3=5/5; Phase 4=0/6 amending; Phases 5-9 still TBD)
 
 ## Performance Metrics
 

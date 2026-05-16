@@ -409,3 +409,152 @@ etc.) CORS gets revisited then.
 
 Each plan ends with `uv run --package api pytest -v` green (where
 applicable) and a clean `git status` before commit.
+
+---
+
+## Amendment — 2026-05-16 (post-plan, pre-execute)
+
+**Trigger:** operator deployment-shape decision during execute kickoff.
+Production target = Google Cloud Run, single all-in-one container with
+embedded Postgres + Python app, GCS volume for `pg_dump` rotation, PAT-
+secured cron API replacing in-container cron. Adopted verbatim from the
+`../food-assistant/` sibling-repo pattern. See `DISCUSSION-LOG.md`
+amendment section for the gray-area walk (G9, G10, G11) and the
+correction log.
+
+### G1–G8 status: UNCHANGED. UI-SPEC + brand palette: UNCHANGED.
+
+### G9 — Dump cadence + corruption tolerance (locked)
+
+- **Trigger:** debounced (30 s quiescent window) FastAPI background
+  task spawned post-write + final dump on SIGTERM/SIGINT (entrypoint
+  trap). One env knob: `DB_DUMP_DEBOUNCE_MS=30000`.
+- **Locking:** non-blocking `flock -n 9` on `${DUMP_FILE}.lock` so a
+  stuck dump never queues another.
+- **Rotation:** 3-slot ring (`.tmp → latest → .prev`) with atomic `mv`
+  (object-level atomic on GCS FUSE). Staging happens in `/tmp` to
+  avoid FUSE-perm issues, then `cp` into the persist dir.
+- **Verification:** `pg_restore --list` validates each staged dump
+  before promotion. Corrupt dump → exit 1, no rotation.
+- **Restore chain on boot:** `latest → .prev → fresh schema` (Alembic
+  upgrade head against an empty DB). One bad dump never bricks the
+  container.
+
+### G10 — PAT secret source + rotation (locked)
+
+- **Prod:** GCP Secret Manager secret `trend-internal-pat`, mounted as
+  env `TREND_INTERNAL_PAT` via Cloud Run
+  `--set-secrets=TREND_INTERNAL_PAT=trend-internal-pat:latest`. Rotation
+  = update secret + redeploy.
+- **Local:** `.env` (gitignored) at repo root sets the same var;
+  compose passes it through.
+- **Compare:** `hmac.compare_digest` (constant-time). Bearer scheme.
+- **Fail-closed:** if env var unset or empty, `/api/internal/crawl`
+  returns 503 on every call. No fail-open path.
+- **Format:** `python -c "import secrets;
+  print(secrets.token_urlsafe(32))"` → 44-char URL-safe base64.
+
+### G11 — Scheduler service deletion (locked: same phase)
+
+- `services/scheduler/` directory **deleted in 04-06** (entire crond +
+  docker-cli image + crontab + entrypoint + README).
+- `docker-compose.yml` `scheduler:` service block removed.
+- Cloud Scheduler in prod hits `/api/internal/crawl`. Local trigger
+  shapes preserved: `curl -H "Authorization: Bearer $PAT" -X POST
+  http://localhost:8000/api/internal/crawl` OR `docker compose run
+  --rm crawler run-once` (Typer CLI unchanged).
+- `crawl_runs` table + `GET /api/runs` (Phase 3 telemetry) **stay**.
+  Telemetry is independent of trigger shape.
+
+### Files expected to change — AMENDMENT additions
+
+**Backend (api service) — additions:**
+- `services/api/src/api/main.py` — also register `internal` router
+  (PAT-gated `/api/internal/crawl`).
+- `services/api/src/api/routes/internal.py` (new) — `POST
+  /api/internal/crawl` endpoint, depends on `pat_auth`, queues a
+  `BackgroundTasks` call into `crawler.app.orchestrator.run_once`,
+  returns 202 + `{ "crawl_run_id": "..." }`.
+- `services/api/src/api/middleware/__init__.py` (new) + `services/api/
+  src/api/middleware/pat_auth.py` (new) — FastAPI `HTTPBearer`
+  dependency + constant-time PAT compare, 401 on missing header, 403
+  on wrong PAT, 503 if env unset.
+- `services/api/src/api/middleware/dump_debouncer.py` (new) — wraps
+  any successful write response and schedules `DB_DUMP_SCRIPT` via
+  `asyncio.create_task` + debounce timer.
+- `services/api/pyproject.toml` — depend on the crawler package
+  (workspace-local dep) so `internal.py` can import
+  `crawler.app.orchestrator.run_once`.
+- `services/api/tests/test_pat_auth.py` (new) — 401 / 403 / 503 / 202.
+- `services/api/tests/test_internal_crawl.py` (new) — happy path with
+  monkeypatched `run_once`.
+
+**Production container layer:**
+- `services/api/Dockerfile` — rewritten 3-stage (web-builder
+  node:20-alpine + python-builder uv-on-debian + runtime ubuntu:24.04
+  with postgresql-16 + postgresql-client-16 + ca-certificates).
+- `services/api/docker-entrypoint.sh` (new) — port of food-assistant
+  169-line bash. Embedded-PG init / restore chain / `pg_ctl start
+  -w` / Alembic upgrade head / DATABASE_URL toggle / `trap cleanup
+  SIGTERM SIGINT QUIT` → final dump + `pg_ctl stop -m fast`.
+- `scripts/pg-dump-rotate.sh` (new) — verbatim port from
+  food-assistant with `PG_DB=trend_researcher` + `DUMP_FILE=/app/
+  data/trend_researcher.dump` (+ .prev / .tmp).
+- `.env.example` — adds `TREND_INTERNAL_PAT=` documentation.
+- `.gitignore` — adds `.env`.
+
+**Deploy:**
+- `cloudbuild.yaml` (new) — port of food-assistant verbatim with
+  service=`trend-researcher`, region=`europe-west2` (operator default),
+  repo=`trend-researcher-images`, bucket=`trend-researcher-data`,
+  secret mount for `TREND_INTERNAL_PAT`, `--add-volume
+  type=cloud-storage` mount of bucket → `/app/data`.
+
+**Tests location (decision locked here):**
+- `packages/core/tests/` (new dir) — for `test_topic_stats_view.py`
+  (04-01 T02) and any future shared-package tests.
+- `services/api/tests/` (already exists — Phase 3) — for api-only
+  tests (04-02, 04-03, 04-06 PAT/internal tests).
+- `services/crawler/tests/` (already exists — Phase 1) — unchanged.
+
+**Compose / ops (revised vs. original CONTEXT):**
+- `docker-compose.yml` — `scheduler:` service **removed**. `api:`
+  service gets a new named volume `appdata:/app/data` to mirror prod
+  layout (entrypoint still detects external Postgres via DATABASE_URL
+  and skips embedded boot for local dev).
+- `services/scheduler/` directory **deleted** (entire tree).
+- `scripts/smoke_phase4.sh` (new in 04-05) — extended to cover the
+  embedded-PG boot path inside the prod-image variant; local-compose
+  variant unchanged behaviour.
+
+### Out of scope — AMENDMENT additions
+
+- Cloud SQL / managed Postgres (intentionally rejected — embedded PG
+  + GCS dump-sync is the chosen pattern).
+- Separate scheduler container or in-process cron (replaced by Cloud
+  Scheduler → HTTP).
+- PAT rotation logic in-app (operator does it via Secret Manager
+  redeploy).
+- Multi-region / HA Cloud Run config (single-region single-instance
+  for v1 single-operator tool).
+- Authenticated read-side endpoints (`/api/topics`, `/api/runs`,
+  `/api/healthz` stay public — single-operator localhost / Cloud Run
+  with VPC-only ingress in deploy notes).
+- Dump compression beyond `pg_dump -Fc` default (Cloud Run egress is
+  cheap at this scale).
+- Cloud Logging structured-log integration beyond stdout JSON
+  (Cloud Run captures stdout by default).
+
+### Plan shape (revised — 6 plans, 6 waves)
+
+1. **04-01** — Alembic 0003 `v_topic_stats` view + tests (W1, unchanged)
+2. **04-02** — `/api/*` re-prefix + `GET /api/topics` + tests (W2, unchanged)
+3. **04-03** — `GET /api/topics/{id}` + tests (W3, unchanged)
+4. **04-04** — Vuetify SPA scaffold (W4, unchanged)
+5. **04-05** — **REWRITTEN**: Ubuntu+PG-16 Dockerfile + entrypoint port
+   + dump-rotate script + StaticFiles mount + dump-debouncer middleware
+   + smoke + closeout (W5, autonomous=false, operator gate at smoke)
+6. **04-06** — **NEW**: PAT middleware + `/api/internal/crawl` + delete
+   `services/scheduler/` + drop scheduler from compose + `cloudbuild.yaml`
+   + PAT tests + README (W6, autonomous=false, operator gate at first
+   Cloud Run deploy)
