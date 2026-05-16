@@ -111,7 +111,11 @@ Plans:
   4. Each row links to a topic detail route (placeholder/empty page acceptable in this phase)
 
 Plans:
-- [ ] 04-01: TBD
+- [ ] 04-01: Alembic 0003 `v_topic_stats` view (breadth, longevity_seconds) + tests
+- [ ] 04-02: `/api/*` re-prefix + `GET /api/topics` list endpoint (sort whitelist + limit) + tests
+- [ ] 04-03: `GET /api/topics/{id}` detail endpoint + nested sources + tests
+- [ ] 04-04: Vuetify 3 SPA scaffold at `web/` (TopicList + TopicDetail + Vite proxy + formatLongevity)
+- [ ] 04-05: api Dockerfile multi-stage (node+python) + StaticFiles mount + compose build context + `scripts/smoke_phase4.sh` + README + SUMMARY
 
 ### Phase 5: Topic Detail & Crawl Config UI
 **Goal**: Make individual topics inspectable (sources, raw payloads where relevant) and let the operator manage crawl scope — enable/disable sources and tune per-source `N` — from the UI without editing config files. Introduces the `crawl_config` Postgres table as the single source of truth for mutable crawl settings.

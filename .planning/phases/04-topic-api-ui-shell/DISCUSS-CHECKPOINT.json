@@ -1,0 +1,60 @@
+{
+  "phase": 4,
+  "phase_slug": "topic-api-ui-shell",
+  "phase_name": "Topic API & UI Shell",
+  "status": "discussed",
+  "discussed_at": "2026-05-16T12:00:00.000Z",
+  "mode": "mvp",
+  "depends_on_phase": 3,
+  "req_ids_in_scope": ["UI-001", "UI-002", "STO-006"],
+  "gray_areas": {
+    "G1": {"area": "Vuetify stack", "disposition": "defaulted", "decision": "Vuetify 3 + Vite + npm"},
+    "G2": {"area": "SPA serving model", "disposition": "operator-decided", "decision": "FastAPI mounts dist/ same-origin; API moves to /api/* prefix"},
+    "G3": {"area": "SPA repo location", "disposition": "defaulted", "decision": "top-level web/"},
+    "G4": {"area": "breadth/longevity compute", "disposition": "operator-decided", "decision": "Postgres VIEW v_topic_stats via Alembic 0003; longevity_seconds in DB; frontend formats human-readable"},
+    "G5": {"area": "topic-list API contract", "disposition": "recommendation-accepted", "decision": "GET /api/topics, sort=-field whitelist {breadth,longevity,last_seen_at}, default -last_seen_at, ?limit clamped [1,100], no filters Phase 4, wrapper response {topics, limit, sort}"},
+    "G6": {"area": "CORS", "disposition": "n/a", "decision": "killed by G2 same-origin"},
+    "G7": {"area": "topic-detail placeholder", "disposition": "recommendation-accepted", "decision": "ship minimal GET /api/topics/{id} now with nested sources; Phase 5 extends additively"},
+    "G8": {"area": "SPA→API base URL", "disposition": "defaulted", "decision": "Vite proxy in dev (/api/* → :8000); same-origin in prod; no env var"}
+  },
+  "carry_forward": [
+    "ARC-001 no AI in any path including read",
+    "FastAPI shell shape from Phase 3 03-02 (lazy engine, get_session, ConfigDict, wrapper responses, port 8000)",
+    "/healthz and /runs preserved (re-prefixed to /api/*)",
+    "Topic + TopicSource ORM unchanged",
+    "Phase 5 owns crawl_config + per-source UI control",
+    "Phase 6+ owns business_cases",
+    "Phase 2 dedup hot-fix preserved",
+    "Phase 3 scheduler + crawl_runs + CRAWLER_DISABLED_SOURCES preserved"
+  ],
+  "out_of_scope": [
+    "crawl_config table + UI (Phase 5)",
+    "per-source enable/N UI (Phase 5)",
+    "AI / LLM / assessment / business_cases (Phase 6+)",
+    "auth / multi-tenancy (out of v1)",
+    "CORS middleware (same-origin)",
+    "filter params on /api/topics (Phase 5+)",
+    "pagination beyond ?limit",
+    "real-time updates",
+    "frontend tests / Vitest",
+    "dedup_key indexed find_candidates (still deferred)",
+    "MATERIALIZED VIEW for v_topic_stats",
+    "API versioning prefix /api/v1"
+  ],
+  "plan_count_target": 5,
+  "plans_proposed": [
+    {"id": "04-01", "scope": "Alembic 0003 v_topic_stats view + tests"},
+    {"id": "04-02", "scope": "/api/* re-prefix + GET /api/topics list + sort whitelist + tests"},
+    {"id": "04-03", "scope": "GET /api/topics/{id} detail + nested sources + tests"},
+    {"id": "04-04", "scope": "Vuetify 3 SPA scaffold at web/ (TopicList + TopicDetail + Vite proxy + formatLongevity)"},
+    {"id": "04-05", "scope": "api Dockerfile multi-stage (node+python) + StaticFiles mount + compose build context + smoke_phase4.sh + README + SUMMARY"}
+  ],
+  "open_for_plan": [
+    "ORM read-entity vs raw select for v_topic_stats",
+    "Node LTS pin for Dockerfile builder + web/.nvmrc",
+    "Whether /api re-prefix folds into 04-02 or is its own micro-plan (leaning folded)",
+    "Vuetify 3 minor version pin",
+    "v-data-table vs v-data-table-server (leaning server-driven)"
+  ],
+  "next_step": "/gsd-plan-phase 4"
+}
