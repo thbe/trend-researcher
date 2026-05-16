@@ -11,7 +11,15 @@ dependencies = [
 ]
 
 [tool.uv.workspace]
-members = ["services/*", "packages/*"]
+# Explicit member list (not `services/*`) because services/scheduler is a
+# pure alpine+crond+docker-cli container with no Python code or pyproject.toml.
+# Added in Plan 03-04; surfaced by the Plan 03-05 smoke run.
+members = [
+    "packages/core",
+    "services/api",
+    "services/assessor",
+    "services/crawler",
+]
 
 [tool.uv.sources]
 core = { workspace = true }
