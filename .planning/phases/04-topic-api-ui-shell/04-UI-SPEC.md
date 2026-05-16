@@ -102,8 +102,12 @@ rule mapped to Vuetify roles:
 | --------------- | ---------------------- | ------------------ | ------------------------------------------- |
 | Dominant (60%)  | `#FFFFFF`              | `surface`          | Page background, card background            |
 | Secondary (30%) | `#F5F5F5` / `#212121`  | `background` / `on-surface` | App bar (top), table header strip, body text |
-| Accent (10%)    | `#1976D2` (Vuetify primary blue) | `primary`          | Row-link affordance (hover state on table rows), active sort-direction chevron, focus rings |
-| Destructive     | `#B00020` (Vuetify error red)    | `error`            | Error-state alert in `TopicDetail.vue` when fetch fails |
+| Accent (10%)    | `#EF233C` (thbe Punch Red)       | `primary`          | Row-link affordance (hover tint on table rows), active sort-direction chevron, focus rings, external-link icon — capped at 4 elements to preserve the 60/30/10 ratio |
+| Support         | `#62727B` (thbe Slate Grey-Blue) | `secondary`        | Reserved for non-primary actions (none used in Phase 4 UI; declared so Phase 5+ inherits the brand token) |
+| Positive        | `#10B981` (thbe Success Green)   | `success`          | Reserved for positive states (none used in Phase 4 UI; declared so Phase 5+ inherits the brand token) |
+| Destructive     | `#B00020` (Material crimson)     | `error`            | Error-state alert in `TopicDetail.vue` when fetch fails — kept visually distinct from `primary` brand red so an error never reads as a CTA |
+
+**Brand source:** thbe brand palette per `~/.config/opencode/context/voice/thbe-voice.md` (Punch Red / Slate Grey-Blue / Success Green). The app bar stays `surface` (white), not primary — red is reserved to the 4 accent uses listed above so the UI does not shout.
 
 **Accent reserved for (explicit list, NOT "all interactive elements"):**
 1. Hover state on `v-data-table` row (subtle primary tint)
