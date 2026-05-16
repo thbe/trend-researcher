@@ -16,17 +16,15 @@ See `.planning/PROJECT.md` for the full scope, constraints, and decision log; `.
 
 ## Sources
 
-As of Phase 2, `crawler run-once` fans out across **7 sources** (1 JSON-Firebase + 4 Reddit JSON + 2 RSS). Per-source failures are isolated — if Reddit returns 429 or an RSS feed times out, the run continues and the failed source name is recorded in the `failed_sources` log field.
+As of Phase 2, `crawler run-once` fans out across **3 sources** (1 JSON-Firebase + 2 RSS). Per-source failures are isolated — if an RSS feed times out or returns malformed XML, the run continues and the failed source name is recorded in the `failed_sources` column on the new `crawl_runs` row (and in the structlog `failed_sources` field).
 
 | #   | `source_name`      | Type            | Endpoint                                                                  | Adapter                                                       |
 | --- | ------------------ | --------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | 1   | `hackernews`       | JSON (Firebase) | `https://hacker-news.firebaseio.com/v0/topstories.json`                   | `services/crawler/src/crawler/adapters/sources/hackernews.py` |
-| 2   | `reddit_all`       | JSON (Reddit)   | `https://www.reddit.com/r/all/hot.json`                                   | `services/crawler/src/crawler/adapters/sources/reddit.py`     |
-| 3   | `reddit_business`  | JSON (Reddit)   | `https://www.reddit.com/r/business/hot.json`                              | `services/crawler/src/crawler/adapters/sources/reddit.py`     |
-| 4   | `reddit_retail`    | JSON (Reddit)   | `https://www.reddit.com/r/retail/hot.json`                                | `services/crawler/src/crawler/adapters/sources/reddit.py`     |
-| 5   | `reddit_bifl`      | JSON (Reddit)   | `https://www.reddit.com/r/BuyItForLife/hot.json`                          | `services/crawler/src/crawler/adapters/sources/reddit.py`     |
-| 6   | `nyt_homepage`     | RSS (XML)       | `https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml`               | `services/crawler/src/crawler/adapters/sources/rss.py`        |
-| 7   | `google_news`      | RSS (XML)       | `https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en`                   | `services/crawler/src/crawler/adapters/sources/rss.py`        |
+| 2   | `nyt_homepage`     | RSS (XML)       | `https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml`               | `services/crawler/src/crawler/adapters/sources/rss.py`        |
+| 3   | `google_news`      | RSS (XML)       | `https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en`                   | `services/crawler/src/crawler/adapters/sources/rss.py`        |
+
+Reddit was planned but dropped — its Cloudflare WAF blocks datacenter-IP `httpx` requests regardless of User-Agent. The `RedditJsonSource` adapter is kept in `services/crawler/src/crawler/adapters/sources/reddit.py` but is not registered in `build_sources()`. See `.planning/phases/02-multi-source-ingest/CONTEXT.md` "Reddit access reality" for the full investigation.
 
 Cross-source dedup is automatic: the same headline appearing on, say, NYT and Google News collapses to **one** row in `topics` with **two** rows in `topic_sources` (different `source_name`, possibly different `url`). See `services/crawler/tests/test_cross_source_dedup.py` for the proof.
 
@@ -53,17 +51,87 @@ The active filter is logged at INFO as `crawler.disabled_sources.applied` (with 
 
 ## Quickstart
 
-End-to-end Phase 2 walking skeleton: bring up Postgres, apply the schema, run one multi-source crawl across all 7 sources, and inspect the topics table per source.
+As of Phase 3 a single `docker compose up -d` brings up **Postgres + api + scheduler**; the scheduler then triggers the crawler automatically every 12 hours (at 00:00 and 12:00 UTC). Manual one-off runs still work via `docker compose run --rm crawler`.
 
 ```bash
 # 1. Copy env defaults (DATABASE_URL points at localhost; compose overrides for the container).
 cp .env.example .env
 
-# 2. Start Postgres (waits until healthy) and build the crawler image.
+# 2. Start Postgres (waits until healthy) and build all images.
+docker compose up -d postgres
+docker compose build crawler api scheduler
+
+# 3. Apply the schema from the host (alembic uses host-side DATABASE_URL → localhost).
+uv run --package core alembic -c packages/core/alembic.ini upgrade head
+
+# 4. Bring up the api + scheduler. The crawler runs on its own cron tick from here on.
+docker compose up -d api scheduler
+
+# 5. (Optional) Trigger a one-off crawl without waiting for the next 12h tick.
+docker compose run --rm crawler run-once --top-n 30
+```
+
+For the full live end-to-end smoke procedure, see `scripts/smoke_phase3.sh` (Phase 3) or `scripts/smoke_phase2.sh` (Phase 2, crawler-only).
+
+### Operator endpoints
+
+The api service exposes two operational endpoints on `http://localhost:8000`:
+
+- `GET /healthz` — liveness + DB-ping; returns `200 {"status":"ok","db":"reachable"}` when Postgres is reachable, `503 {"status":"degraded","db":"unreachable"}` otherwise.
+- `GET /runs?limit=N` — last N rows from the `crawl_runs` operational telemetry table (one row per `crawler run-once` invocation), newest-first. `limit` defaults to 20 and is clamped to `[1, 100]`.
+
+Inspecting recent crawls:
+
+```bash
+# Quick sanity check
+curl -fs localhost:8000/healthz
+
+# Last 5 crawls — when they ran, what they inserted/updated, what failed
+curl -s 'localhost:8000/runs?limit=5' \
+  | jq '.runs[] | {started_at, totals_inserted, totals_updated, totals_errors, failed_sources}'
+```
+
+The same data is also queryable directly:
+
+```bash
+docker compose exec postgres psql -U trend -d trend_researcher -c \
+  "SELECT started_at, totals_inserted, totals_updated, totals_errors, failed_sources
+   FROM crawl_runs ORDER BY started_at DESC LIMIT 5;"
+```
+
+### Cadence
+
+The `scheduler` container runs a single 1-line cron in `services/scheduler/crontab`:
+
+```
+0 0,12 * * * cd /workspace && docker compose run --rm crawler run-once
+```
+
+Anchored at `00:00` and `12:00` UTC (not drift-tolerant — every tick is at the same wall-clock time regardless of how long the previous crawl took).
+
+To change the cadence:
+
+1. Edit `services/scheduler/crontab` to the new schedule.
+2. Rebuild the scheduler image: `docker compose build scheduler`.
+3. Restart the service: `docker compose up -d scheduler`.
+
+`services/scheduler/README.md` covers the docker-socket trust-model note (the scheduler mounts the host docker socket so it can fire `docker compose run --rm crawler`; this is effectively root-on-host and is the reason this stack is single-operator-internal-tool only).
+
+For end-to-end verification that the full Phase 3 stack works (`/healthz`, scheduler crontab loaded, 3 manual triggers writing 3 `crawl_runs` rows, `/runs` returning them), see `scripts/smoke_phase3.sh`.
+
+## Quickstart — crawler only (Phase 2)
+
+If you want to drive the crawler directly without the scheduler (e.g. for development on the ingest path), the Phase 2 walking-skeleton procedure still works:
+
+```bash
+# 1. Copy env defaults.
+cp .env.example .env
+
+# 2. Start Postgres and build the crawler image.
 docker compose up -d postgres
 docker compose build crawler
 
-# 3. Apply the schema from the host (alembic uses host-side DATABASE_URL → localhost).
+# 3. Apply the schema.
 uv run --package core alembic -c packages/core/alembic.ini upgrade head
 
 # 4. Run a one-shot multi-source crawl. Use --top-n 30 for a quick smoke; production default is 100.
