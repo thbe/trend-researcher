@@ -9,6 +9,9 @@ business logic.
 
 from __future__ import annotations
 
+import os
+
+import structlog
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from core import get_engine, get_sessionmaker, get_settings
@@ -47,6 +50,20 @@ _RSS_SOURCES: list[tuple[str, str]] = [
     ),
 ]
 
+_log = structlog.get_logger(__name__)
+
+
+def _parse_disabled_sources(raw: str | None) -> set[str]:
+    """Parse the ``CRAWLER_DISABLED_SOURCES`` env value into a set of names.
+
+    Empty / unset / whitespace-only ⇒ empty set (no filtering). Otherwise:
+    split on ``,``, strip each entry, lowercase, drop empties. Comparison
+    against ``source.name`` is case-insensitive by convention here.
+    """
+    if not raw or not raw.strip():
+        return set()
+    return {entry.strip().lower() for entry in raw.split(",") if entry.strip()}
+
 
 def build_sources() -> list[SourcePort]:
     """Return the list of sources the crawler will fan out across.
@@ -56,12 +73,33 @@ def build_sources() -> list[SourcePort]:
         live smoke confirmed datacenter-IP WAF block (see module docstring).
     Phase 2 (Wave 2): adds 2 RSS sources (NYT homepage, Google News).
     Effective v1 source count: 3 (HackerNews + NYT + Google News).
+
+    Phase 3 (Plan 03-03): the env var ``CRAWLER_DISABLED_SOURCES`` (csv,
+    case-insensitive, whitespace-tolerant) filters out any source whose
+    ``.name`` appears in the list. Unknown names log a warning but do NOT
+    raise — operator typos remain visible without breaking the run. An
+    empty result (all sources disabled) returns ``[]`` and the orchestrator
+    runs to completion writing a zero-totals ``crawl_runs`` row.
     """
     sources: list[SourcePort] = [HackerNewsSource()]
     sources.extend(
         RssSource(name=name, feed_url=url) for name, url in _RSS_SOURCES
     )
-    return sources
+
+    raw = os.environ.get("CRAWLER_DISABLED_SOURCES")
+    disabled = _parse_disabled_sources(raw)
+    if not disabled:
+        return sources
+
+    known = {s.name.lower() for s in sources}
+    unknown = disabled - known
+    if unknown:
+        _log.warning(
+            "crawler.disabled_sources.unknown",
+            unknown=sorted(unknown),
+        )
+    _log.info("crawler.disabled_sources.applied", disabled=sorted(disabled))
+    return [s for s in sources if s.name.lower() not in disabled]
 
 
 def build_repository() -> tuple[
