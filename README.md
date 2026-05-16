@@ -30,6 +30,27 @@ As of Phase 2, `crawler run-once` fans out across **7 sources** (1 JSON-Firebase
 
 Cross-source dedup is automatic: the same headline appearing on, say, NYT and Google News collapses to **one** row in `topics` with **two** rows in `topic_sources` (different `source_name`, possibly different `url`). See `services/crawler/tests/test_cross_source_dedup.py` for the proof.
 
+### Disabling a source at runtime
+
+Set `CRAWLER_DISABLED_SOURCES` in `.env` (or in the `crawler` service `environment:` block in `docker-compose.yml`) to skip one or more sources on the next crawl tick. Format is a comma-separated list of source names. The change takes effect on the next container start — no rebuild, no migration.
+
+```bash
+# .env
+CRAWLER_DISABLED_SOURCES=hackernews,google_news
+```
+
+Valid source names (v1): `hackernews`, `nyt_homepage`, `google_news`.
+
+Behavior:
+
+- **Case-insensitive**: `HackerNews`, `hackernews`, and `HACKERNEWS` all match the same source.
+- **Whitespace-tolerant**: `  hackernews ,  google_news  ` is parsed cleanly.
+- **Unknown names are warnings, not errors**: an unknown name (e.g. a typo, or `reddit` which is not currently registered) logs a `crawler.disabled_sources.unknown` warning on startup and the run proceeds with the rest of the filter applied. This keeps operator typos visible without breaking the unattended 12h cadence. Phase 5's UI-driven `crawl_config` will close this gap with validated names.
+- **All sources disabled is allowed**: setting `CRAWLER_DISABLED_SOURCES` to every known name returns an empty source list and the orchestrator still completes, writing a zero-totals row to `crawl_runs`. Useful for parking the crawler without tearing the stack down.
+- **Empty or unset value**: no filter is applied — all registered sources run.
+
+The active filter is logged at INFO as `crawler.disabled_sources.applied` (with the sorted disabled set) on every container start, so `docker logs crawler` shows what was skipped.
+
 ## Quickstart
 
 End-to-end Phase 2 walking skeleton: bring up Postgres, apply the schema, run one multi-source crawl across all 7 sources, and inspect the topics table per source.
