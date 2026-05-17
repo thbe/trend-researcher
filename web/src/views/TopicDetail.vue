@@ -175,12 +175,12 @@ watch(() => props.id, load)
             </template>
             <v-list-item-title>
               <a
-                :href="src.url"
+                :href="src.resolved_url || src.url"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="text-decoration-none"
               >
-                {{ truncateUrl(src.url) }}
+                {{ truncateUrl(src.resolved_url || src.url) }}
                 <v-icon
                   icon="mdi-open-in-new"
                   size="x-small"

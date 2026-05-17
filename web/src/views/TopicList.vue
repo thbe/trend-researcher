@@ -71,6 +71,16 @@ function apiSortString(sort: SortItem[]): string {
   return `${prefix}${apiKey}`
 }
 
+// Plan 04.5-01 / T06 (D-Q5): truncate description to ~120 chars for the
+// list-view subtitle so a long publisher standfirst doesn't blow up row
+// height. Full description is shown un-truncated on TopicDetail.vue.
+function truncate(text: string | null, max = 120): string {
+  if (!text) {
+    return ''
+  }
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
 async function load(options: DataTableOptions) {
   loading.value = true
   error.value = null
@@ -152,7 +162,7 @@ onMounted(() => {
       </template>
       <template #item.description="{ item }">
         <span v-if="item.description" class="text-medium-emphasis">{{
-          item.description
+          truncate(item.description)
         }}</span>
         <em v-else class="text-disabled">—</em>
       </template>

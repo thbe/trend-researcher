@@ -25,6 +25,8 @@
 - **ING-007 — Fuzzy dedup at ingest.** Incoming items are deduplicated against existing topics using rapidfuzz-style fuzzy title/keyword matching. Match threshold is configurable; **default similarity threshold = 85** (rapidfuzz token_set_ratio). No embeddings, no LLM dedup at this layer (see OOS-002).
 - **ING-008 — Update-on-recrawl semantics.** When an incoming item matches an existing topic, the crawler MUST update the existing row: append a new source-reference (if from a new source or new URL), update `last_seen_at`, increment `observation_count`. It MUST NOT insert a duplicate row.
 - **ING-009 — Deterministic, AI-free ingest.** No LLM call may occur in the ingest path. This is an architectural invariant, not an optimization (see ARC-001).
+- **ING-010 — Description capture from raw payload.** When a source's raw payload carries a human-readable standfirst/summary (Google News RSS `<description>`, NYT homepage `<description>`), the crawler MUST persist it to `topics.description` using a first-non-empty merge across re-observations. HN topics correctly leave `description` NULL (no such field in their payload). Added 2026-05-17 (Phase 4.5); operator request m1086.
+- **ING-011 — In-process URL resolution for redirect tokens.** Google News RSS items expose CBM-base64 redirect tokens (`https://news.google.com/rss/articles/CBM...`) instead of publisher URLs. The crawler MUST attempt to decode these in-process (zero new outbound HTTP, ARC-001 preserved) and store the result in `topic_sources.resolved_url`. Decoder failures (modern opaque tokens) MUST log structlog.warn and leave `resolved_url` NULL; the SPA falls back to the original `url`. Added 2026-05-17 (Phase 4.5).
 
 ### Storage (STO)
 
@@ -108,6 +110,8 @@
 | ING-007   | Fuzzy dedup at ingest                | Phase 1       | proposed |
 | ING-008   | Update-on-recrawl semantics          | Phase 1       | proposed |
 | ING-009   | Deterministic, AI-free ingest        | Phase 1       | proposed |
+| ING-010   | Description capture from raw payload | Phase 4.5     | done     |
+| ING-011   | In-process URL resolution            | Phase 4.5     | done     |
 | STO-001   | PostgreSQL topic store               | Phase 1       | proposed |
 | STO-002   | Topic table shape                    | Phase 1       | proposed |
 | STO-003   | Source references table              | Phase 1       | proposed |

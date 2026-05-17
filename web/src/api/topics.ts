@@ -19,6 +19,11 @@ export interface TopicSource {
   id: string
   source_name: string
   url: string
+  // Plan 04.5-01 (ING-011): decoded publisher URL for google_news CBM
+  // redirect tokens. NULL when the source isn't google_news, when the
+  // in-process decoder couldn't extract a URL, or for any row created
+  // before migration 0004. SPA prefers this over `url` for clickability.
+  resolved_url: string | null
   native_rank: number | null
   observed_at: string
 }

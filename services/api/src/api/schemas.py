@@ -115,6 +115,8 @@ class TopicSourceResponse(BaseModel):
     """``topic_sources.source_name`` slug (e.g. ``hackernews``, ``nyt_homepage``)."""
     url: str
     """``topic_sources.url`` canonical URL for this observation."""
+    resolved_url: str | None = None
+    """``topic_sources.resolved_url`` decoded publisher URL for google_news CBM redirect tokens, ``None`` otherwise (Plan 04.5-01 / ING-011)."""
     native_rank: int
     """``topic_sources.native_rank`` 1-based position in the source's native ranking when observed."""
     observed_at: datetime

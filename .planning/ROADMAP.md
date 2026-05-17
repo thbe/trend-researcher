@@ -27,7 +27,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Multi-Source Ingest** - Plug in remaining v1 sources behind the source-plugin contract
 - [x] **Phase 3: Scheduler & Ops Baseline** - 12h periodic runs, structured logs, single-command docker-compose
 - [x] **Phase 4: Topic API & UI Shell** - Backend read API + Vuetify SPA with sortable topic list (breadth/longevity) — Deployed to Cloud Run `https://trend-researcher-3g5goqptla-nw.a.run.app` on 2026-05-17 via `cloudbuild.yaml` v0.4.1 (commit `a33d8d3`)
-- [ ] **Phase 4.5: Topic Description Capture & URL Resolution** (INSERTED 2026-05-17) - Recover the description/standfirst already in fetched bytes (Google News RSS `<description>`, NYT homepage standfirst) + resolve Google News CBM-base64 redirect URLs to publisher URLs — no new HTTP fetches, ARC-001 preserved
+- [x] **Phase 4.5: Topic Description Capture & URL Resolution** (INSERTED 2026-05-17, completed 2026-05-18) - Recovered description/standfirst from Google News RSS + NYT homepage; in-process CBM decoder for Google News redirect URLs (all 81 prod tokens were modern opaque format → expected fallback path, 47 descriptions backfilled live); `topic_sources.resolved_url` column added (Alembic 0004); SPA renders truncated subtitle + full detail paragraph + resolved-URL source links — image v0.5.0 ready, deploy pending operator gate
 - [ ] **Phase 5: Topic Detail & Crawl Config UI** - Topic detail view with sources + per-source enable/N control
 - [ ] **Phase 6: AI Assessment Foundation** - Local OpenCode runner, RAG over Postgres, retail relevance verdict, business_cases table
 - [ ] **Phase 7: Business-Case Generation** - Full business-case schema with importance, opportunity/risk, investment band, confidence
@@ -139,7 +139,7 @@ Plans:
   7. Existing rows backfill from next crawl naturally (no separate backfill job)
 
 Plans:
-- [ ] 04.5-01: Topic description capture + Google News URL resolution + backfill (Wave 1, 6 tasks, autonomous)
+- [x] 04.5-01: Topic description capture + Google News URL resolution + backfill (Wave 1, 6 tasks, autonomous) — completed 2026-05-18, commits f530a2c..4406415 + T06
 
 ### Phase 5: Topic Detail & Crawl Config UI
 **Goal**: Make individual topics inspectable (sources, raw payloads where relevant) and let the operator manage crawl scope — enable/disable sources and tune per-source `N` — from the UI without editing config files. Introduces the `crawl_config` Postgres table as the single source of truth for mutable crawl settings.
