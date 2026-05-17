@@ -8,7 +8,9 @@ before the first request). FastAPI ``Depends(get_session)`` yields an
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -59,4 +61,19 @@ async def dispose_engine() -> None:
         _sessionmaker = None
 
 
-__all__ = ["dispose_engine", "get_session"]
+__all__ = ["dispose_engine", "get_session", "get_web_dist_dir"]
+
+
+def get_web_dist_dir() -> Path | None:
+    """Return the SPA build directory if WEB_DIST_DIR points at a real dir.
+
+    Returns ``None`` when the env var is unset or doesn't resolve to an existing
+    directory — ``api.main`` then skips mounting StaticFiles (e.g. local dev
+    where the SPA is served by ``vite`` on :5173 and proxies ``/api/*``).
+    """
+
+    raw = os.environ.get("WEB_DIST_DIR", "").strip()
+    if not raw:
+        return None
+    path = Path(raw)
+    return path if path.is_dir() else None
