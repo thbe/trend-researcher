@@ -75,20 +75,27 @@ For the full live end-to-end smoke procedure, see `scripts/smoke_phase3.sh` (Pha
 
 ### Operator endpoints
 
-The api service exposes two operational endpoints on `http://localhost:8000`:
+The api service exposes all endpoints under the `/api/*` prefix on `http://localhost:8000`:
 
-- `GET /healthz` — liveness + DB-ping; returns `200 {"status":"ok","db":"reachable"}` when Postgres is reachable, `503 {"status":"degraded","db":"unreachable"}` otherwise.
-- `GET /runs?limit=N` — last N rows from the `crawl_runs` operational telemetry table (one row per `crawler run-once` invocation), newest-first. `limit` defaults to 20 and is clamped to `[1, 100]`.
+- `GET /api/healthz` — liveness + DB-ping; returns `200 {"status":"ok","db":"reachable"}` when Postgres is reachable, `503 {"status":"degraded","db":"unreachable"}` otherwise.
+- `GET /api/runs?limit=N` — last N rows from the `crawl_runs` operational telemetry table (one row per `crawler run-once` invocation), newest-first. `limit` defaults to 20 and is clamped to `[1, 100]`.
+- `GET /api/topics?sort=&limit=N` — paginated topic list joined with derived `v_topic_stats` (`breadth` = distinct source count, `longevity_seconds` = `last_seen_at - first_seen_at` in seconds). `sort` whitelist `{breadth, longevity, last_seen_at}` with optional leading `-` for desc (default `-last_seen_at`); non-matches → `400`. `limit` defaults to 20, clamped to `[1, 100]`. Response shape: `{topics:[...], limit, sort}`. No nested `sources` or `topic_metadata` on list rows (those come from the per-topic detail endpoint added in Phase 4 wave 3).
+
+> **Phase 4 endpoint migration note:** in Phase 3 these routes lived at `/healthz` and `/runs`. Phase 4 re-prefixed all API routes under `/api/*` so the SPA catch-all (mounted at `/` in Phase 4 wave 5) doesn't swallow them. Update any operator scripts accordingly — bare `/healthz` and `/runs` now return `404`.
 
 Inspecting recent crawls:
 
 ```bash
 # Quick sanity check
-curl -fs localhost:8000/healthz
+curl -fs localhost:8000/api/healthz
 
 # Last 5 crawls — when they ran, what they inserted/updated, what failed
-curl -s 'localhost:8000/runs?limit=5' \
+curl -s 'localhost:8000/api/runs?limit=5' \
   | jq '.runs[] | {started_at, totals_inserted, totals_updated, totals_errors, failed_sources}'
+
+# Trending topics by breadth (which stories show up across the most sources)
+curl -s 'localhost:8000/api/topics?sort=-breadth&limit=10' \
+  | jq '.topics[] | {title, breadth, longevity_seconds, last_seen_at}'
 ```
 
 The same data is also queryable directly:
@@ -117,7 +124,7 @@ To change the cadence:
 
 `services/scheduler/README.md` covers the docker-socket trust-model note (the scheduler mounts the host docker socket so it can fire `docker compose run --rm crawler`; this is effectively root-on-host and is the reason this stack is single-operator-internal-tool only).
 
-For end-to-end verification that the full Phase 3 stack works (`/healthz`, scheduler crontab loaded, 3 manual triggers writing 3 `crawl_runs` rows, `/runs` returning them), see `scripts/smoke_phase3.sh`.
+For end-to-end verification that the full Phase 3 stack works (`/api/healthz`, scheduler crontab loaded, 3 manual triggers writing 3 `crawl_runs` rows, `/api/runs` returning them), see `scripts/smoke_phase3.sh`.
 
 ## Quickstart — crawler only (Phase 2)
 

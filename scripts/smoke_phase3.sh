@@ -7,9 +7,9 @@
 # .planning/phases/03-scheduler-ops-baseline/SMOKE-RESULTS.md), then asserts:
 #
 #   - 3 new rows in crawl_runs (one per trigger)
-#   - /healthz returns "status":"ok"
+#   - /api/healthz returns "status":"ok"
 #   - scheduler container loaded its crontab
-#   - /runs?limit=5 returns the 3 rows
+#   - /api/runs?limit=5 returns the 3 rows
 #
 # Hits the real internet (HN + NYT + Google News). Manual run only.
 #
@@ -48,8 +48,8 @@ echo "==> [5/17] bringing up api + scheduler"
 docker compose up -d api scheduler
 sleep 5
 
-echo "==> [6/17] /healthz sanity"
-curl -fs localhost:8000/healthz | tee /dev/stderr | grep -q '"status":"ok"'
+echo "==> [6/17] /api/healthz sanity"
+curl -fs localhost:8000/api/healthz | tee /dev/stderr | grep -q '"status":"ok"'
 
 echo "==> [7/17] scheduler crontab loaded"
 docker logs trend-scheduler 2>&1 | grep -q "starting crond"
@@ -79,9 +79,9 @@ if [ "$multi" -lt 1 ]; then
   echo "    SOFT WARN: no topic was observed on >=2 of the 3 immediate runs (upstream front-page churn?)"
 fi
 
-echo "==> [12/17] /runs?limit=5 returns 3 rows newest-first"
-runs_len=$(curl -fs "localhost:8000/runs?limit=5" | jq '.runs | length')
-echo "    /runs returned: $runs_len rows"
+echo "==> [12/17] /api/runs?limit=5 returns 3 rows newest-first"
+runs_len=$(curl -fs "localhost:8000/api/runs?limit=5" | jq '.runs | length')
+echo "    /api/runs returned: $runs_len rows"
 test "$runs_len" = "3"
 
 echo "==> [13/17] failed_sources discipline (printed for inspection — not asserted)"
