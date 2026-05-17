@@ -101,12 +101,16 @@ gcloud storage buckets add-iam-policy-binding gs://trend-researcher-data \
   --role="roles/storage.objectAdmin"
 
 # Cloud Build: deploy to Cloud Run + act as runtime SA
+# NOTE: --condition=None is required if the project IAM policy already contains
+# any conditional bindings (gcloud refuses non-interactive writes otherwise).
 gcloud projects add-iam-policy-binding thbe-private \
   --member="serviceAccount:${BUILD_SA}" \
-  --role="roles/run.admin"
+  --role="roles/run.admin" \
+  --condition=None
 gcloud projects add-iam-policy-binding thbe-private \
   --member="serviceAccount:${BUILD_SA}" \
-  --role="roles/iam.serviceAccountUser"
+  --role="roles/iam.serviceAccountUser" \
+  --condition=None
 ```
 
 ---

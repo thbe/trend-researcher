@@ -66,9 +66,13 @@ steps:
   #   - Build context is repo root (Dockerfile copies packages/ + services/ + web/)
   #   - Dockerfile lives at services/api/Dockerfile (3-stage: web -> py -> ubuntu+pg)
   #   - --cache-from latest pulls the prior image layers when available
+  #   - DOCKER_BUILDKIT=1: Dockerfile uses RUN --mount=type=cache for uv,
+  #     which is a BuildKit-only feature. Legacy builder needs explicit opt-in.
   # ---------------------------------------------------------------------------
   - id: build
     name: gcr.io/cloud-builders/docker
+    env:
+      - DOCKER_BUILDKIT=1
     args:
       - build
       - --file=services/api/Dockerfile
