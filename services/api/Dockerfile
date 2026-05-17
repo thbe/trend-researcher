@@ -35,13 +35,33 @@ RUN npm run build
 # ---------------------------------------------------------------------------
 # Stage 2: python-builder — resolve uv workspace + install api package
 # ---------------------------------------------------------------------------
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS python-builder
+# Use Ubuntu 24.04 + apt python3.12 so the venv we produce here has the SAME
+# interpreter path (/usr/bin/python3.12) as the runtime stage. The official
+# astral uv images are Debian-based, which puts python at /usr/local/bin and
+# breaks console-script shebangs after we COPY .venv into Ubuntu runtime.
+# uv binary is grabbed from the upstream image (single static binary).
+FROM ubuntu:24.04 AS python-builder
 
-ENV UV_LINK_MODE=copy \
+ENV DEBIAN_FRONTEND=noninteractive \
+    UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
-    UV_PYTHON_DOWNLOADS=never
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/app/.venv
 
-WORKDIR /build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        python3.12 \
+        python3.12-venv \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy uv binary from upstream image (no debian/python in this layer).
+COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /usr/local/bin/uv
+
+# Use /app as workdir so the editable-install .pth files baked into the venv
+# point at /app/packages/core/src + /app/services/*/src — paths that still
+# resolve identically after COPY into the runtime stage.
+WORKDIR /app
 
 # Lockfile + every member pyproject first, so dependency resolution caches
 # on source-only changes. Preserves the Phase 3 layer-cache pattern.
@@ -88,9 +108,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Python venv + workspace source from python-builder.
-COPY --from=python-builder /build/.venv /app/.venv
-COPY --from=python-builder /build/packages /app/packages
-COPY --from=python-builder /build/services /app/services
+COPY --from=python-builder /app/.venv /app/.venv
+COPY --from=python-builder /app/packages /app/packages
+COPY --from=python-builder /app/services /app/services
 
 # Built SPA from web-builder.
 COPY --from=web-builder /web/dist /app/web_dist
