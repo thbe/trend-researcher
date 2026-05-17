@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-amending
-stopped_at: Phase 4 architecture amendment in progress — pivot to single-container Cloud Run + GCS dump-sync + PAT-secured cron API (food-assistant pattern). G1-G8 preserved; G9 (dump cadence), G10 (PAT secret), G11 (scheduler deletion) resolved. 04-01..04-04 plans unchanged. 04-05 being rewritten. 04-06 new (scheduler deletion + PAT + /api/internal/crawl + cloudbuild.yaml). Plan-checker re-verify pending on 04-05 + 04-06.
-last_updated: "2026-05-16T15:30:00.000Z"
-last_activity: 2026-05-16 -- Phase 4 amendment cycle (G9-G11 locked, CONTEXT + DISCUSSION-LOG amended, 04-05 rewrite + 04-06 add in flight)
+status: phase-planned
+stopped_at: Phase 4 amendment committed (ca93d2d). 6 plans across 6 waves locked. Plan-checker inline self-verify PASS 11/11 on amended 04-05 + new 04-06. Ready to execute Wave 1 (04-01 Alembic VIEW v_topic_stats). Operator gates queued at 04-05 T07 (smoke) + 04-06 T09 (first Cloud Run deploy).
+last_updated: "2026-05-16T16:00:00.000Z"
+last_activity: 2026-05-16 -- Phase 4 amendment complete (commit ca93d2d); pivoting back to execute-phase Wave 1 (04-01)
 progress:
   total_phases: 9
   completed_phases: 3
