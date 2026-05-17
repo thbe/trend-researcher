@@ -139,6 +139,28 @@ SERVICE_URL=$(gcloud run services describe trend-researcher \
 echo "${SERVICE_URL}"
 ```
 
+### 3.1 Grant public ingress (allUsers → roles/run.invoker)
+
+> ⚠️ **Required step.** Even with `--allow-unauthenticated` in
+> `cloudbuild.yaml` the first revision is sometimes created with an empty
+> IAM policy (`etag: ACAB`) and all requests return Google-Front-End 403.
+> Verified gotcha during Wave 6 T09 first deploy on `thbe-private`.
+
+```
+gcloud run services add-iam-policy-binding trend-researcher \
+  --region=europe-west2 \
+  --member=allUsers \
+  --role=roles/run.invoker
+```
+
+Verify with:
+```
+gcloud run services get-iam-policy trend-researcher --region=europe-west2
+# Expect: bindings.members: [allUsers], bindings.role: roles/run.invoker
+```
+
+This grant is idempotent on subsequent deploys — only required once.
+
 ---
 
 ## 4. Cloud Scheduler wiring
@@ -298,13 +320,86 @@ Watch-outs:
 
 ---
 
-## First-deploy smoke results
+## First-deploy smoke results — 2026-05-17
 
-> Populated by Wave 6 T09 after the live deploy.
+Recorded after Wave 6 T09 first live deploy on `thbe-private`.
 
-- **Build duration:** _TBD_
-- **Image size (pushed):** _TBD_
-- **First cold-start latency:** _TBD_
-- **First crawl wall-clock:** _TBD_
-- **Topics observed after first crawl:** _TBD_
-- **Deviations from this runbook:** _TBD_
+**Versions deployed:**
+- v0.4.0 (commit `ef514cc`) — first deploy, BackgroundTask trigger pattern
+- v0.4.1 (commit `a33d8d3`) — sync trigger pattern (current production)
+
+**Build:**
+- Wall-clock: **2m 37s** on `E2_HIGHCPU_8` (both v0.4.0 and v0.4.1; cache hit on builder stages)
+- Image size pushed to Artifact Registry: **186 MB** compressed (597 MB uncompressed locally)
+- Build ID v0.4.1: `80770dce-335e-4837-86c9-8b170f144a9a`
+
+**Service:**
+- URL: `https://trend-researcher-3g5goqptla-nw.a.run.app`
+- Revision: `trend-researcher-00002-…` (v0.4.1)
+- Cold-start latency to `/api/healthz`: **363 ms** (post-allUsers IAM grant)
+
+**6-curl smoke matrix (post v0.4.1 deploy, all PASS):**
+
+| # | Endpoint                                  | Expected             | Actual                                           |
+|---|-------------------------------------------|----------------------|--------------------------------------------------|
+| 1 | `GET /api/healthz`                        | 200 + `db:reachable` | ✅ 200 + `{"status":"ok","db":"reachable"}`      |
+| 2 | `GET /`                                   | 200 + SPA HTML       | ✅ 200, 400-byte `index.html`                     |
+| 3 | `GET /api/topics?limit=5`                 | 200 + list           | ✅ 200, real headlines after first crawl         |
+| 4 | `POST /api/internal/crawl` (no token)     | 401                  | ✅ 401                                           |
+| 5 | `POST /api/internal/crawl` (wrong token)  | 403                  | ✅ 403                                           |
+| 6 | `POST /api/internal/crawl` (PAT)          | 200 + stats          | ✅ 200, fetched=159 inserted=11 updated=145 in 2.97 s |
+
+**First crawl (sync trigger):**
+- Wall-clock: **3.58 s** (curl total) / **2.97 s** server-side
+- Totals: fetched=159, inserted=11, updated=145, skipped=3, errors=0
+- Per source: hackernews 6 ins / 94 upd, nyt_homepage 0 ins / 20 upd, google_news 5 ins / 31 upd
+
+**Cloud Scheduler verification:**
+- Job `trend-researcher-crawl` created, schedule `0 */12 * * *` UTC
+- Manual trigger executed `17:48:26` — succeeded, materialised 3rd `/api/runs` row (inserted=6 updated=150)
+- `lastAttemptTime: 2026-05-17T17:48:26Z`, `status: {}`, `state: ENABLED`
+
+**Topics in production DB after deploy:** 167 unique topics across 3 crawl runs.
+
+**Deviations from this runbook:**
+
+1. **BuildKit must be enabled on Cloud Build's docker step.**
+   First build (v0.4.0 attempt #1, build `026b69a9`) failed at step
+   17/36 with `the --mount option requires BuildKit`. Root cause: the
+   `gcr.io/cloud-builders/docker` legacy builder does not enable BuildKit
+   by default, but our Dockerfile uses `RUN --mount=type=cache,target=...`
+   for uv sync. Fixed by adding `env: ['DOCKER_BUILDKIT=1']` to step 1 in
+   `cloudbuild.yaml` (commit `ef514cc`). Now documented in the cloudbuild
+   file itself.
+
+2. **`gcloud add-iam-policy-binding` requires `--condition=None`** when the
+   project has any conditional IAM bindings. Plain bindings fail with
+   `non-interactive mode + conditional bindings present`. Documented in
+   §2.5 of this runbook.
+
+3. **`--allow-unauthenticated` in cloudbuild deploy args was silently
+   dropped** on first revision. Required manual `add-iam-policy-binding
+   --member=allUsers --role=roles/run.invoker` (now documented as §3.1
+   above). Verified org policy `iam.allowedPolicyMemberDomains` was empty,
+   so root cause is likely a default-deny on first-revision IAM. The
+   binding survives subsequent deploys.
+
+4. **`/api/internal/crawl` returns 200 (sync), not 202 (background task).**
+   The original Wave 6 plan used `BackgroundTasks` returning 202 immediately.
+   Switched to synchronous execution returning 200 + stats body in commit
+   `a33d8d3` because:
+   - Cloud Run throttles CPU after the response is sent under scale-to-zero,
+     making background-task completion timing unpredictable.
+   - Sync execution gives Cloud Scheduler a meaningful retry signal (5xx vs
+     2xx); fire-and-forget 202 cannot communicate crawl failure.
+   - Crawl is bounded (~3 s observed) — far below the 600 s Cloud Run
+     timeout, so there is no UX cost to making it sync.
+
+5. **Topic `description` field is `null` for all 167 topics.** The crawler
+   does not yet capture descriptions — Phase 4.5 (queued) will surface
+   them from already-fetched Google News RSS `<description>` and NYT
+   home-page standfirst.
+
+6. **Google News URLs are base64 CBM tokens** (e.g.
+   `CBMixgFBVV95cUxQOG…`), not resolved publisher URLs. Phase 4.5 (queued)
+   will resolve them.
