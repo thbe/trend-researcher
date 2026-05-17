@@ -26,7 +26,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation & First Crawl** - Repo skeleton, Postgres schema, dedup, and one working crawler (HN) writing to DB
 - [x] **Phase 2: Multi-Source Ingest** - Plug in remaining v1 sources behind the source-plugin contract
 - [x] **Phase 3: Scheduler & Ops Baseline** - 12h periodic runs, structured logs, single-command docker-compose
-- [ ] **Phase 4: Topic API & UI Shell** - Backend read API + Vuetify SPA with sortable topic list (breadth/longevity)
+- [x] **Phase 4: Topic API & UI Shell** - Backend read API + Vuetify SPA with sortable topic list (breadth/longevity) — Deployed to Cloud Run `https://trend-researcher-3g5goqptla-nw.a.run.app` on 2026-05-17 via `cloudbuild.yaml` v0.4.1 (commit `a33d8d3`)
 - [ ] **Phase 5: Topic Detail & Crawl Config UI** - Topic detail view with sources + per-source enable/N control
 - [ ] **Phase 6: AI Assessment Foundation** - Local OpenCode runner, RAG over Postgres, retail relevance verdict, business_cases table
 - [ ] **Phase 7: Business-Case Generation** - Full business-case schema with importance, opportunity/risk, investment band, confidence
@@ -105,18 +105,20 @@ Plans:
 **Depends on**: Phase 3
 **Requirements**: UI-001, UI-002, STO-006
 **Success Criteria** (what must be TRUE):
-  1. Backend read API returns topics with `breadth` (cross-source count) and `longevity` (days observed) computed via SQL, not stored
-  2. Vuetify SPA loads the topic list and renders it as a sortable Vuetify data table
-  3. Sort by breadth, longevity, and last_seen all work and the resulting order matches a hand-checked SQL query
-  4. Each row links to a topic detail route (placeholder/empty page acceptable in this phase)
+  1. [x] Backend read API returns topics with `breadth` (cross-source count) and `longevity` (days observed) computed via SQL, not stored
+  2. [x] Vuetify SPA loads the topic list and renders it as a sortable Vuetify data table
+  3. [x] Sort by breadth, longevity, and last_seen all work and the resulting order matches a hand-checked SQL query
+  4. [x] Each row links to a topic detail route (placeholder/empty page acceptable in this phase)
 
 Plans:
-- [ ] 04-01 (W1): Alembic 0003 `v_topic_stats` view (breadth, longevity_seconds) + tests
-- [ ] 04-02 (W2, deps: 04-01): `/api/*` re-prefix + `GET /api/topics` list endpoint (sort whitelist + limit) + tests
-- [ ] 04-03 (W3, deps: 04-02): `GET /api/topics/{id}` detail endpoint + nested sources + tests
-- [ ] 04-04 (W4, deps: 04-03): Vuetify 3 SPA scaffold at `web/` (TopicList + TopicDetail + Vite proxy + formatLongevity + thbe brand palette)
-- [ ] 04-05 (W5, deps: 04-04, **autonomous=false**): Ubuntu+PG-16 3-stage Dockerfile + docker-entrypoint.sh + `scripts/pg-dump-rotate.sh` + StaticFiles mount + dump-debouncer middleware + `scripts/smoke_phase4.sh` (local + prod-image modes) + README + SUMMARY
-- [ ] 04-06 (W6, deps: 04-05, **autonomous=false**): PAT-secured `POST /api/internal/crawl` + DELETE `services/scheduler/` tree + drop scheduler from compose + `cloudbuild.yaml` (Cloud Run + GCS-FUSE + Secret Manager) + `.env.example` + PAT tests + `CLOUD-RUN-DEPLOY.md` + first Cloud Run deploy + closeout
+- [x] 04-01 (W1): Alembic 0003 `v_topic_stats` view (breadth, longevity_seconds) + tests
+- [x] 04-02 (W2, deps: 04-01): `/api/*` re-prefix + `GET /api/topics` list endpoint (sort whitelist + limit) + tests
+- [x] 04-03 (W3, deps: 04-02): `GET /api/topics/{id}` detail endpoint + nested sources + tests
+- [x] 04-04 (W4, deps: 04-03): Vuetify 3 SPA scaffold at `web/` (TopicList + TopicDetail + Vite proxy + formatLongevity + thbe brand palette)
+- [x] 04-05 (W5, deps: 04-04, **autonomous=false**): Ubuntu+PG-16 3-stage Dockerfile + docker-entrypoint.sh + `scripts/pg-dump-rotate.sh` + StaticFiles mount + dump-debouncer middleware + `scripts/smoke_phase4.sh` (local + prod-image modes) + README + SUMMARY
+- [x] 04-06 (W6, deps: 04-05, **autonomous=false**): PAT-secured `POST /api/internal/crawl` + DELETE `services/scheduler/` tree + drop scheduler from compose + `cloudbuild.yaml` (Cloud Run + GCS-FUSE + Secret Manager) + `.env.example` + PAT tests + `CLOUD-RUN-DEPLOY.md` + first Cloud Run deploy + closeout
+
+**Phase 4 deployed:** `https://trend-researcher-3g5goqptla-nw.a.run.app` on 2026-05-17 (Cloud Run europe-west2, revision 00002, image v0.4.1, commit `a33d8d3`). 6/6 smoke PASS; Cloud Scheduler job `trend-researcher-crawl` ENABLED on `0 */12 * * *` UTC.
 
 **Phase 4 amendment (2026-05-16, post-plan / pre-execute):** production target locked to single-container Cloud Run + GCS-FUSE dump-sync + PAT-secured cron API, adopting the `food-assistant` sibling-repo pattern verbatim. Plan shape grew from 5 → 6 plans (04-05 rewritten; 04-06 added). `services/scheduler/` deleted in-phase (replaced by Cloud Scheduler → `/api/internal/crawl`). Locked decisions G9 (30 s debounce + 3-slot ring + `pg_restore --list` verify), G10 (GCP Secret Manager → `TREND_INTERNAL_PAT`, `hmac.compare_digest`, fail-closed 503), G11 (scheduler-deletion same phase). See `.planning/phases/04-topic-api-ui-shell/DISCUSSION-LOG.md` amendment section + `CONTEXT.md` amendment block.
 

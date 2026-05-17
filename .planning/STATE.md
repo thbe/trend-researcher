@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-planned
-stopped_at: Phase 4 amendment committed (ca93d2d). 6 plans across 6 waves locked. Plan-checker inline self-verify PASS 11/11 on amended 04-05 + new 04-06. Ready to execute Wave 1 (04-01 Alembic VIEW v_topic_stats). Operator gates queued at 04-05 T07 (smoke) + 04-06 T09 (first Cloud Run deploy).
-last_updated: "2026-05-16T16:00:00.000Z"
-last_activity: 2026-05-16 -- Phase 4 amendment complete (commit ca93d2d); pivoting back to execute-phase Wave 1 (04-01)
+status: phase-complete
+stopped_at: Phase 4 complete. All 6 waves shipped and deployed to Cloud Run https://trend-researcher-3g5goqptla-nw.a.run.app on 2026-05-17 (revision 00002, image v0.4.1, commit a33d8d3). 6/6 smoke PASS; Cloud Scheduler job ENABLED on 0 */12 * * * UTC. SUMMARY + ROADMAP + STATE updated. Phase 4 verifier closeout next (regression / schema-drift / code-review gates + 04-VERIFICATION.md). Then Phase 4.5 discuss queued (description capture from Google News RSS + NYT standfirst, Google News URL resolution).
+last_updated: "2026-05-17T18:00:00.000Z"
+last_activity: 2026-05-17 -- Phase 4 closed; Cloud Run live; T10 SUMMARY/ROADMAP/STATE committed; verifier next
 progress:
   total_phases: 9
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 20
-  completed_plans: 14
-  percent: 42
+  completed_plans: 20
+  percent: 60
 ---
 
 # Project State
