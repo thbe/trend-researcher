@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: phase-complete
-stopped_at: Phase 4.5 execute-phase complete. Single plan 04.5-01 shipped across 6 sequential tasks (commits f530a2c, 29f157d, d3ad185, a793a47, 4406415, + T06 closeout). All 6 plan-level acceptance gates PASS. Live findings — (a) all 81 prod google_news CBM tokens are modern opaque format; decoder correctly returns None + structlog.warn for each, SPA fallback to redirect URL is the load-bearing behaviour in production (documented per D-Q3, not a bug); (b) 47 of 77 prod topics had a recoverable description in raw_payload.summary; backfill script verified idempotent live (1st run 47 writes, 2nd run 0 writes); (c) pre-existing test_cross_source_dedup.py failure (run_once signature drift from Phase 3) logged to deferred-items.md, deselected from regression — NOT caused by this plan. ARC-001 preserved (zero new outbound HTTP added). Single Alembic migration tree honoured (only 0004_*). REQUIREMENTS.md updated with ING-010 + ING-011 (status=done). Image v0.5.0 ready to build; cloudbuild.yaml default TAG_NAME bumped from vX.Y.Z to v0.5.0. **Operator gate pending**: `gcloud builds submit --config=cloudbuild.yaml --region=europe-west2 --substitutions=TAG_NAME=v0.5.0,COMMIT_SHA=$(git rev-parse --short HEAD)` and optional one-shot backfill against prod DSN. Resume by either deploying v0.5.0 + smoking the public URL, OR jumping to /gsd-discuss-phase 5 (Topic Detail & Crawl Config UI).
-last_updated: "2026-05-18T00:30:00.000Z"
-last_activity: Phase 4.5 complete (image v0.5.0 ready, deploy pending operator gate)
+stopped_at: Phase 4.5.1 execute-phase complete. Consolidated discuss+plan inline (small ~10-line core fix); 3 sequential tasks shipped (T01 `63ec8f6` parser flag + tests, T02 `c85e9b8` cleanup script, T03 closeout). v0.5.0 (commit `8cc99ad`) is LIVE on Cloud Run. Post-deploy smoke surfaced Google News RSS `<description>` as `<ol><li><a>` related-articles HTML fragment (not prose) — operator picked Option A (strip at parser). RssSource now has `capture_summary: bool = True` opt-out flag; Google News registered with False; raw value still preserved in `raw_payload['summary']` for forensic fidelity. Cleanup script verified idempotent against local DB (27 → 0). Image v0.5.1 ready; cloudbuild.yaml default TAG_NAME bumped v0.5.0 → v0.5.1. **Operator gate pending**: (1) push to origin/main, (2) `gcloud builds submit --config=cloudbuild.yaml --region=europe-west2 --substitutions=TAG_NAME=v0.5.1,COMMIT_SHA=$(git rev-parse --short HEAD)`, (3) run cleanup script against prod DSN, (4) smoke `/api/topics?limit=10` to confirm Google News rows now `description: null`. Resume by deploying v0.5.1 + smoking the public URL, OR jumping to /gsd-discuss-phase 5 (Topic Detail & Crawl Config UI).
+last_updated: "2026-05-18T01:00:00.000Z"
+last_activity: Phase 4.5.1 complete (image v0.5.1 ready, deploy pending operator gate)
 progress:
   total_phases: 10
   completed_phases: 5
-  total_plans: 21
-  completed_plans: 21
-  percent: 67
+  total_plans: 22
+  completed_plans: 22
+  percent: 71
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 
 ## Current Position
 
-Phase: 4.5 of 10 — COMPLETE (image v0.5.0 ready, deploy pending operator gate)
-Plan: 04.5-01 closed (all 6 tasks shipped, SUMMARY written, ROADMAP + REQUIREMENTS updated). Next phase: Phase 5 — Topic Detail & Crawl Config UI.
-Status: Phase 4.5 done. Single plan, 6 tasks, executed inline-sequentially with commit-per-task (f530a2c, 29f157d, d3ad185, a793a47, 4406415, + T06 closeout). All acceptance gates PASS. Live findings recorded in 04.5-01-SUMMARY.md. Image v0.5.0 will be built+deployed on operator gate via `gcloud builds submit --config=cloudbuild.yaml --region=europe-west2 --substitutions=TAG_NAME=v0.5.0,COMMIT_SHA=$(git rev-parse --short HEAD)`.
-Last activity: 2026-05-18 -- Phase 4.5 execute-phase complete (image v0.5.0 ready, deploy pending operator gate)
+Phase: 4.5.1 of 10 — COMPLETE (image v0.5.1 ready, deploy pending operator gate). v0.5.0 LIVE on Cloud Run.
+Plan: 04.5.1-01 closed (3 tasks shipped, consolidated discuss+plan, SUMMARY written, ROADMAP updated). Next phase: Phase 5 — Topic Detail & Crawl Config UI.
+Status: Phase 4.5.1 done. Single consolidated plan, 3 tasks, executed inline-sequentially with commit-per-task (`63ec8f6` parser flag + 2 new tests, `c85e9b8` cleanup script, + T03 closeout). All acceptance criteria PASS. Image v0.5.1 will be built+deployed on operator gate via `gcloud builds submit --config=cloudbuild.yaml --region=europe-west2 --substitutions=TAG_NAME=v0.5.1,COMMIT_SHA=$(git rev-parse --short HEAD)`.
+Last activity: 2026-05-18 -- Phase 4.5.1 execute-phase complete (image v0.5.1 ready, deploy pending operator gate)
 
-Progress: [███████░░░] 67% (21 of ~31 plans — Phase 1=5/5, Phase 2=4/4, Phase 3=5/5, Phase 4=6/6, Phase 4.5=1/1; Phases 5-9 still TBD)
+Progress: [███████░░░] 71% (22 of ~31 plans — Phase 1=5/5, Phase 2=4/4, Phase 3=5/5, Phase 4=6/6, Phase 4.5=1/1, Phase 4.5.1=1/1; Phases 5-9 still TBD)
 
 ## Performance Metrics
 
@@ -85,5 +85,5 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-05-18
-Stopped at: Phase 4.5 execute-phase complete. Plan 04.5-01 shipped on main; image v0.5.0 ready to build but **not yet deployed** (operator gate). All 6 tasks committed (f530a2c, 29f157d, d3ad185, a793a47, 4406415, + T06 closeout commit pending below). SUMMARY.md written + self-checked. REQUIREMENTS.md gained ING-010 + ING-011 (status=done). ROADMAP.md Phase 4.5 flipped `[x]`. Resume by: (a) `gcloud builds submit --config=cloudbuild.yaml --region=europe-west2 --substitutions=TAG_NAME=v0.5.0,COMMIT_SHA=$(git rev-parse --short HEAD)` then smoke the public URL, OR (b) jump straight to `/gsd-discuss-phase 5` for Topic Detail & Crawl Config UI.
-Resume file: .planning/phases/04.5-topic-description-capture-url-resolution/04.5-01-SUMMARY.md
+Stopped at: Phase 4.5.1 execute-phase complete. Consolidated discuss+plan + 3 sequential commits on main: `63ec8f6` (T01 parser flag + 2 new tests, 48/48 PASS), `c85e9b8` (T02 cleanup script, idempotent verified 27→0 local), + T03 closeout commit (ROADMAP/STATE/SUMMARY/cloudbuild). v0.5.0 (`8cc99ad`) is LIVE on Cloud Run. Image v0.5.1 ready to build but **not yet deployed** (operator gate). Resume by: (a) push origin/main, then `gcloud builds submit --config=cloudbuild.yaml --region=europe-west2 --substitutions=TAG_NAME=v0.5.1,COMMIT_SHA=$(git rev-parse --short HEAD)`, then run cleanup script against prod DSN, then smoke `/api/topics?limit=10`. OR (b) jump straight to `/gsd-discuss-phase 5` for Topic Detail & Crawl Config UI.
+Resume file: .planning/phases/04.5.1-google-news-description-skip/04.5.1-01-SUMMARY.md

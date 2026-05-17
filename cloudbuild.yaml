@@ -37,11 +37,12 @@
 #
 #   6. Manual build submission (always use --region to avoid global fallback):
 #        gcloud builds submit --config=cloudbuild.yaml --region=europe-west2 \
-#          --substitutions=TAG_NAME=v0.5.0,COMMIT_SHA=$(git rev-parse --short HEAD)
+#          --substitutions=TAG_NAME=v0.5.1,COMMIT_SHA=$(git rev-parse --short HEAD)
 #
-#      Current release line: v0.5.0 (Plan 04.5-01 — description capture +
-#      Google News URL resolution + one-shot backfill). Previous: v0.4.1
-#      (Phase 4 — topic list/detail SPA + Cloud Scheduler crawl trigger).
+#      Current release line: v0.5.1 (Plan 04.5.1 — Google News description
+#      skip at parser level + one-shot cleanup of dirty rows from v0.5.0
+#      backfill). Previous: v0.5.0 (Plan 04.5-01 — description capture +
+#      Google News URL resolution + one-shot backfill).
 #
 # =============================================================================
 
