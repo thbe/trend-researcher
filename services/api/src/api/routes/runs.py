@@ -9,6 +9,9 @@ ingest failures, and the table is small enough that this stays cheap.
 Per Phase 3 CONTEXT.md the response is a JSON object (``{runs:[...],
 limit:N}``) rather than a bare array so future fields (eg. ``next_cursor``)
 can be added without breaking consumers.
+
+Mounted at ``/api/runs`` (prefix applied in ``main.py`` so the SPA catch-all
+at ``/`` doesn't swallow this route — see Phase 4 CONTEXT.md G2).
 """
 
 from __future__ import annotations

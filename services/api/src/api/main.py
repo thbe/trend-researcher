@@ -34,8 +34,8 @@ app = FastAPI(
     lifespan=_lifespan,
 )
 
-app.include_router(healthz_routes.router)
-app.include_router(runs_routes.router)
+app.include_router(healthz_routes.router, prefix="/api")
+app.include_router(runs_routes.router, prefix="/api")
 
 
 __all__ = ["app"]

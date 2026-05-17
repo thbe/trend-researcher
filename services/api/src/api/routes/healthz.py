@@ -5,6 +5,9 @@ can execute ``SELECT 1`` against Postgres. On any ``DBAPIError`` (which
 covers ``OperationalError`` for connection failures) returns 503 +
 ``{status: degraded, db: unreachable}``.
 
+Mounted at ``/api/healthz`` (prefix applied in ``main.py`` so the SPA catch-all
+at ``/`` doesn't swallow this route — see Phase 4 CONTEXT.md G2).
+
 We deliberately catch ``DBAPIError`` (the SQLAlchemy ancestor) rather than
 ``OperationalError`` alone so transient driver-level failures (e.g. asyncpg
 ``InterfaceError``, auth errors during boot) also surface as 'degraded'
