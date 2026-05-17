@@ -79,9 +79,26 @@ The api service exposes all endpoints under the `/api/*` prefix on `http://local
 
 - `GET /api/healthz` — liveness + DB-ping; returns `200 {"status":"ok","db":"reachable"}` when Postgres is reachable, `503 {"status":"degraded","db":"unreachable"}` otherwise.
 - `GET /api/runs?limit=N` — last N rows from the `crawl_runs` operational telemetry table (one row per `crawler run-once` invocation), newest-first. `limit` defaults to 20 and is clamped to `[1, 100]`.
-- `GET /api/topics?sort=&limit=N` — paginated topic list joined with derived `v_topic_stats` (`breadth` = distinct source count, `longevity_seconds` = `last_seen_at - first_seen_at` in seconds). `sort` whitelist `{breadth, longevity, last_seen_at}` with optional leading `-` for desc (default `-last_seen_at`); non-matches → `400`. `limit` defaults to 20, clamped to `[1, 100]`. Response shape: `{topics:[...], limit, sort}`. No nested `sources` or `topic_metadata` on list rows (those come from the per-topic detail endpoint added in Phase 4 wave 3).
+- `GET /api/topics?sort=&limit=N` — paginated topic list joined with derived `v_topic_stats` (`breadth` = distinct source count, `longevity_seconds` = `last_seen_at - first_seen_at` in seconds). `sort` whitelist `{breadth, longevity, last_seen_at}` with optional leading `-` for desc (default `-last_seen_at`); non-matches → `400`. `limit` defaults to 20, clamped to `[1, 100]`. Response shape: `{topics:[...], limit, sort}`. No nested `sources` or `topic_metadata` on list rows.
+- `GET /api/topics/{id}` — per-topic detail with nested `sources[]` (one entry per `(source_name, observed_at)` observation, ordered by `observed_at DESC`) and the full `topic_metadata` JSONB blob. Returns `404` for unknown ids.
 
 > **Phase 4 endpoint migration note:** in Phase 3 these routes lived at `/healthz` and `/runs`. Phase 4 re-prefixed all API routes under `/api/*` so the SPA catch-all (mounted at `/` in Phase 4 wave 5) doesn't swallow them. Update any operator scripts accordingly — bare `/healthz` and `/runs` now return `404`.
+
+### Open the UI
+
+The Vuetify SPA is built into the production api image and served at `/` by the same FastAPI process that owns `/api/*`. Once `docker compose up -d postgres api` is healthy, open:
+
+**http://localhost:8000/**
+
+You should see the Topics list (most-recently-observed first). Click any row for the per-topic detail view (sources, observation timeline, raw metadata). The SPA reads only from `/api/*` — same origin, no CORS, no client-side auth.
+
+For frontend development with hot-reload (Vite on `:5173`, proxying `/api` → `:8000`), see [`web/README.md`](web/README.md).
+
+### Container persistence
+
+The production api image is **self-contained**: a single `ubuntu:24.04`-based container with `postgresql-16` embedded alongside the FastAPI app (single port `:8000`, single container). On startup it boots the embedded Postgres, runs Alembic migrations, restores from `${PERSIST_DIR}/trend_researcher.dump` if present (latest → previous → fresh-schema fallback), and launches uvicorn. A 30 s-debounced middleware fires `scripts/pg-dump-rotate.sh` after any successful write (POST/PUT/PATCH/DELETE 2xx/3xx) to capture the new state, and SIGTERM triggers a final dump before clean shutdown. The compose stack mounts a named volume `appdata` at `/app/data` so the dump survives container restarts; on Cloud Run the same path is backed by GCS-FUSE (Phase 4 wave 6).
+
+To use an **external** Postgres instead (e.g. local compose development with `trend-postgres` separate), set `DATABASE_URL=postgresql+asyncpg://...` on the api container — the embedded boot path is skipped entirely.
 
 Inspecting recent crawls:
 
