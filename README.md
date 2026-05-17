@@ -51,7 +51,7 @@ The active filter is logged at INFO as `crawler.disabled_sources.applied` (with 
 
 ## Quickstart
 
-As of Phase 3 a single `docker compose up -d` brings up **Postgres + api + scheduler**; the scheduler then triggers the crawler automatically every 12 hours (at 00:00 and 12:00 UTC). Manual one-off runs still work via `docker compose run --rm crawler`.
+As of Phase 4 a single `docker compose up -d` brings up **Postgres + api**. The crawler is triggered out-of-band: in production by Cloud Scheduler hitting `POST /api/internal/crawl` every 12h (see `.planning/phases/04-topic-api-ui-shell/CLOUD-RUN-DEPLOY.md`); locally on demand by `docker compose run --rm crawler run-once` or by curling `/api/internal/crawl` with the PAT.
 
 ```bash
 # 1. Copy env defaults (DATABASE_URL points at localhost; compose overrides for the container).
@@ -59,15 +59,15 @@ cp .env.example .env
 
 # 2. Start Postgres (waits until healthy) and build all images.
 docker compose up -d postgres
-docker compose build crawler api scheduler
+docker compose build crawler api
 
 # 3. Apply the schema from the host (alembic uses host-side DATABASE_URL → localhost).
 uv run --package core alembic -c packages/core/alembic.ini upgrade head
 
-# 4. Bring up the api + scheduler. The crawler runs on its own cron tick from here on.
-docker compose up -d api scheduler
+# 4. Bring up the api.
+docker compose up -d api
 
-# 5. (Optional) Trigger a one-off crawl without waiting for the next 12h tick.
+# 5. (Optional) Trigger a one-off crawl directly via the CLI.
 docker compose run --rm crawler run-once --top-n 30
 ```
 
@@ -81,6 +81,7 @@ The api service exposes all endpoints under the `/api/*` prefix on `http://local
 - `GET /api/runs?limit=N` — last N rows from the `crawl_runs` operational telemetry table (one row per `crawler run-once` invocation), newest-first. `limit` defaults to 20 and is clamped to `[1, 100]`.
 - `GET /api/topics?sort=&limit=N` — paginated topic list joined with derived `v_topic_stats` (`breadth` = distinct source count, `longevity_seconds` = `last_seen_at - first_seen_at` in seconds). `sort` whitelist `{breadth, longevity, last_seen_at}` with optional leading `-` for desc (default `-last_seen_at`); non-matches → `400`. `limit` defaults to 20, clamped to `[1, 100]`. Response shape: `{topics:[...], limit, sort}`. No nested `sources` or `topic_metadata` on list rows.
 - `GET /api/topics/{id}` — per-topic detail with nested `sources[]` (one entry per `(source_name, observed_at)` observation, ordered by `observed_at DESC`) and the full `topic_metadata` JSONB blob. Returns `404` for unknown ids.
+- `POST /api/internal/crawl` — PAT-protected (bearer token in `Authorization` header, sourced from `TREND_INTERNAL_PAT` env). Returns `202 {"status":"queued"}` and runs the crawler in a FastAPI background task with its own isolated engine. Used by Cloud Scheduler in production; fail-closed (`503`) when the PAT env is unset. See **Cadence** below.
 
 > **Phase 4 endpoint migration note:** in Phase 3 these routes lived at `/healthz` and `/runs`. Phase 4 re-prefixed all API routes under `/api/*` so the SPA catch-all (mounted at `/` in Phase 4 wave 5) doesn't swallow them. Update any operator scripts accordingly — bare `/healthz` and `/runs` now return `404`.
 
@@ -125,27 +126,30 @@ docker compose exec postgres psql -U trend -d trend_researcher -c \
 
 ### Cadence
 
-The `scheduler` container runs a single 1-line cron in `services/scheduler/crontab`:
+In production, Cloud Scheduler triggers `POST /api/internal/crawl` on the Cloud Run service every 12h (`0 */12 * * *`). The endpoint is PAT-protected (`Authorization: Bearer <pat>`, sourced from GCP Secret Manager — see `.planning/phases/04-topic-api-ui-shell/CLOUD-RUN-DEPLOY.md` for full setup including PAT generation, Secret Manager seeding, and Cloud Scheduler wiring).
 
+Locally you can fire the same endpoint:
+
+```bash
+# Generate a local PAT (any high-entropy string is fine):
+export TREND_INTERNAL_PAT="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+
+# Restart the api with the PAT in env (compose):
+TREND_INTERNAL_PAT="$TREND_INTERNAL_PAT" docker compose up -d api
+
+# Trigger:
+curl -fs -X POST localhost:8000/api/internal/crawl \
+  -H "Authorization: Bearer $TREND_INTERNAL_PAT"
+# -> 202 {"status":"queued"}
 ```
-0 0,12 * * * cd /workspace && docker compose run --rm crawler run-once
-```
 
-Anchored at `00:00` and `12:00` UTC (not drift-tolerant — every tick is at the same wall-clock time regardless of how long the previous crawl took).
+Without the PAT in env, the endpoint returns `503` (fail-closed). With a wrong token, `403`.
 
-To change the cadence:
-
-1. Edit `services/scheduler/crontab` to the new schedule.
-2. Rebuild the scheduler image: `docker compose build scheduler`.
-3. Restart the service: `docker compose up -d scheduler`.
-
-`services/scheduler/README.md` covers the docker-socket trust-model note (the scheduler mounts the host docker socket so it can fire `docker compose run --rm crawler`; this is effectively root-on-host and is the reason this stack is single-operator-internal-tool only).
-
-For end-to-end verification that the full Phase 3 stack works (`/api/healthz`, scheduler crontab loaded, 3 manual triggers writing 3 `crawl_runs` rows, `/api/runs` returning them), see `scripts/smoke_phase3.sh`.
+For end-to-end verification of the full stack (`/api/healthz`, manual triggers, `/api/runs` growth), see `scripts/smoke_phase3.sh` (legacy, may reference older surface) or run `scripts/smoke_phase4.sh`.
 
 ## Quickstart — crawler only (Phase 2)
 
-If you want to drive the crawler directly without the scheduler (e.g. for development on the ingest path), the Phase 2 walking-skeleton procedure still works:
+If you want to drive the crawler directly via the CLI (e.g. for development on the ingest path), the Phase 2 walking-skeleton procedure still works:
 
 ```bash
 # 1. Copy env defaults.

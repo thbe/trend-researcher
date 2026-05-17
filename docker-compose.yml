@@ -1,11 +1,11 @@
-# Trend Researcher — local stack (Phase 3).
-# Four services:
+# Trend Researcher — local stack.
+# Three services:
 # - postgres:  long-running data store with healthcheck + named volume.
 # - crawler:   one-shot ingest job (no restart policy by design — see ARC-001).
-# - api:       FastAPI control-plane (/healthz, /runs) on :8000.
-# - scheduler: alpine + crond, fires the crawler every 12h
-#              (see services/scheduler/README.md — note the docker-socket
-#              trust-model caveat: single-operator internal tool only).
+# - api:       FastAPI control-plane (/healthz, /runs, /topics, /internal/crawl)
+#              on :8000. In prod (Cloud Run), Cloud Scheduler POSTs
+#              /api/internal/crawl on a 12h cadence — replacing the in-stack
+#              alpine+crond "scheduler" service that lived here through Phase 3.
 
 services:
   postgres:
@@ -43,7 +43,7 @@ services:
       # whitespace-tolerant). Empty/unset = no filter. See Plan 03-03.
       CRAWLER_DISABLED_SOURCES: ""
     # No restart policy: the crawler is a one-shot job. Re-run with
-    # `docker compose run --rm crawler` or let the scheduler fire it.
+    # `docker compose run --rm crawler` or via POST /api/internal/crawl.
 
   api:
     build:
@@ -66,23 +66,6 @@ services:
       - appdata:/app/data
     # Give cleanup() trap enough wall-clock to run final dump + pg_ctl stop.
     stop_grace_period: 30s
-    restart: unless-stopped
-
-  scheduler:
-    build:
-      context: .
-      dockerfile: services/scheduler/Dockerfile
-    image: trend-scheduler:dev
-    container_name: trend-scheduler
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      # Host docker socket: lets crond drive `docker compose` on the host.
-      # See services/scheduler/README.md for the trust-model warning.
-      - /var/run/docker.sock:/var/run/docker.sock
-      # Repo root mounted read-only so `docker compose` sees this file.
-      - .:/workspace:ro
     restart: unless-stopped
 
 volumes:

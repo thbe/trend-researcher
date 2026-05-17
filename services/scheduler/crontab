@@ -1,2 +1,0 @@
-# Trend Researcher: trigger crawler every 12h at 00:00 UTC and 12:00 UTC
-0 0,12 * * * cd /workspace && docker compose run --rm crawler run-once >> /proc/1/fd/1 2>&1
