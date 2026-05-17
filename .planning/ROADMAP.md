@@ -27,6 +27,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Multi-Source Ingest** - Plug in remaining v1 sources behind the source-plugin contract
 - [x] **Phase 3: Scheduler & Ops Baseline** - 12h periodic runs, structured logs, single-command docker-compose
 - [x] **Phase 4: Topic API & UI Shell** - Backend read API + Vuetify SPA with sortable topic list (breadth/longevity) — Deployed to Cloud Run `https://trend-researcher-3g5goqptla-nw.a.run.app` on 2026-05-17 via `cloudbuild.yaml` v0.4.1 (commit `a33d8d3`)
+- [ ] **Phase 4.5: Topic Description Capture & URL Resolution** (INSERTED 2026-05-17) - Recover the description/standfirst already in fetched bytes (Google News RSS `<description>`, NYT homepage standfirst) + resolve Google News CBM-base64 redirect URLs to publisher URLs — no new HTTP fetches, ARC-001 preserved
 - [ ] **Phase 5: Topic Detail & Crawl Config UI** - Topic detail view with sources + per-source enable/N control
 - [ ] **Phase 6: AI Assessment Foundation** - Local OpenCode runner, RAG over Postgres, retail relevance verdict, business_cases table
 - [ ] **Phase 7: Business-Case Generation** - Full business-case schema with importance, opportunity/risk, investment band, confidence
@@ -122,6 +123,24 @@ Plans:
 
 **Phase 4 amendment (2026-05-16, post-plan / pre-execute):** production target locked to single-container Cloud Run + GCS-FUSE dump-sync + PAT-secured cron API, adopting the `food-assistant` sibling-repo pattern verbatim. Plan shape grew from 5 → 6 plans (04-05 rewritten; 04-06 added). `services/scheduler/` deleted in-phase (replaced by Cloud Scheduler → `/api/internal/crawl`). Locked decisions G9 (30 s debounce + 3-slot ring + `pg_restore --list` verify), G10 (GCP Secret Manager → `TREND_INTERNAL_PAT`, `hmac.compare_digest`, fail-closed 503), G11 (scheduler-deletion same phase). See `.planning/phases/04-topic-api-ui-shell/DISCUSSION-LOG.md` amendment section + `CONTEXT.md` amendment block.
 
+### Phase 4.5: Topic Description Capture & URL Resolution
+**Goal**: Surface the human-readable context that's already in our fetched bytes but currently discarded. Google News RSS items carry a `<description>` field; NYT homepage items carry a standfirst snippet — both are in the raw payload we already fetch. Operator m1086 verbatim: *"I can only see the headline, isn't there more context available for analysis?"* Also resolve Google News CBM-base64 redirect URLs to their publisher destinations so source URLs are useful to humans (and later to Phase 6 RAG).
+**Mode:** mvp
+**Depends on**: Phase 4
+**Type:** INSERTED (operator-requested 2026-05-17)
+**Requirements**: ING-010 (NEW: description capture), ING-011 (NEW: URL resolution) — to be added to REQUIREMENTS.md during discuss-phase
+**Success Criteria** (what must be TRUE — DRAFT, finalize in discuss):
+  1. `topics.description` column populated for Google News + NYT-sourced topics on next crawl; HN topics correctly leave it NULL
+  2. `topic_sources.url` for Google News rows resolves to the publisher URL (e.g., `https://www.nbcnews.com/...`), not the `news.google.com/articles/CBM...` redirect token
+  3. Re-observation merge strategy for `description` is documented + tested (first-non-empty / latest / longest — operator picks during discuss)
+  4. No new outbound HTTP fetches added to the ingest path beyond what we already do (URL resolution via base64 token decode if possible, falling back to existing fetch response Location header) — ARC-001 / Stage 1 determinism preserved
+  5. SPA TopicList + TopicDetail render `description` when present, gracefully omit when NULL
+  6. Alembic migration (0004) adds the column (if not already in schema) — check `packages/core/src/core/models.py` first
+  7. Existing rows backfill from next crawl naturally (no separate backfill job)
+
+Plans:
+- [ ] 04.5-01: TBD (scoped during discuss-phase)
+
 ### Phase 5: Topic Detail & Crawl Config UI
 **Goal**: Make individual topics inspectable (sources, raw payloads where relevant) and let the operator manage crawl scope — enable/disable sources and tune per-source `N` — from the UI without editing config files. Introduces the `crawl_config` Postgres table as the single source of truth for mutable crawl settings.
 **Mode:** mvp
@@ -203,14 +222,15 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 4.5 → 5 → 6 → 7 → 8 → 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & First Crawl | 5/5 | Complete | 2026-05-14 |
 | 2. Multi-Source Ingest | 4/4 | Complete | 2026-05-15 |
 | 3. Scheduler & Ops Baseline | 5/5 | Complete | 2026-05-16 |
-| 4. Topic API & UI Shell | 0/6 | Planned (amended: +04-06 for Cloud Run deploy) | - |
+| 4. Topic API & UI Shell | 6/6 | Complete | 2026-05-17 |
+| 4.5. Topic Description Capture & URL Resolution | 0/TBD | Discussing | - |
 | 5. Topic Detail & Crawl Config UI | 0/TBD | Not started | - |
 | 6. AI Assessment Foundation | 0/TBD | Not started | - |
 | 7. Business-Case Generation | 0/TBD | Not started | - |

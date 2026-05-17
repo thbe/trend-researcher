@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-complete
-stopped_at: Phase 4 complete. All 6 waves shipped and deployed to Cloud Run https://trend-researcher-3g5goqptla-nw.a.run.app on 2026-05-17 (revision 00002, image v0.4.1, commit a33d8d3). 6/6 smoke PASS; Cloud Scheduler job ENABLED on 0 */12 * * * UTC. SUMMARY + ROADMAP + STATE updated. Phase 4 verifier closeout next (regression / schema-drift / code-review gates + 04-VERIFICATION.md). Then Phase 4.5 discuss queued (description capture from Google News RSS + NYT standfirst, Google News URL resolution).
-last_updated: "2026-05-17T18:00:00.000Z"
-last_activity: 2026-05-17 -- Phase 4 closed; Cloud Run live; T10 SUMMARY/ROADMAP/STATE committed; verifier next
+status: phase-discussing
+stopped_at: Phase 4.5 (Topic Description Capture & URL Resolution) discuss-phase opened. INSERTED phase triggered by operator m1086 'I can only see the headline, isn't there more context available for analysis?'. Scope grounded against live system — found that (1) topics.description column already exists in schema, (2) entry.summary is already extracted into topic_sources.raw_payload by rss.py:109 so the description bytes are sitting in the DB for all 167 production rows, (3) Google News URLs are CBM-base64 redirect tokens (verified live), (4) RawItem needs additive description field, (5) single Topic creation site at sqlalchemy_topic_repository.py:67. DISCUSSION-LOG.md written with Q1-Q5 operator decisions needed (merge strategy, backfill mechanism, Google News URL resolution strategy, resolved_url column shape, SPA rendering scope). Default recommendations published for each. Awaiting operator answers before /gsd-plan-phase.
+last_updated: "2026-05-17T18:30:00.000Z"
+last_activity: 2026-05-17 -- Phase 4.5 discuss-phase opened; DISCUSSION-LOG.md written; awaiting Q1-Q5 operator answers
 progress:
   total_phases: 9
   completed_phases: 4
