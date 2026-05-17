@@ -116,6 +116,12 @@ class TopicSource(Base):
     )
     source_name: Mapped[str] = mapped_column(Text, nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
+    # Plan 04.5-01 (ING-011, migration 0004): decoded publisher URL for
+    # Google News CBM redirect tokens. NULL when the source isn't a
+    # google_news redirect or when the in-process base64 decoder couldn't
+    # extract a usable URL. SPA prefers this over `url` for clickability;
+    # `url` is preserved AS-IS so we can re-derive on demand.
+    resolved_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     native_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
     observed_at: Mapped[str] = mapped_column(
         TIMESTAMP(timezone=True),
