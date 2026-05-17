@@ -1,12 +1,11 @@
-"""DB-free tests for POST /api/internal/crawl.
+"""DB-free tests for POST /api/internal/crawl (sync execution).
 
-Patch ``api.routes.internal._run_crawl_isolated`` with a recorder so the
-crawler dep graph never actually executes. Asserts:
-  - background task is invoked exactly once with no args
-  - response returns 202 within <500ms even if the task sleeps
-  - exceptions raised inside the bg task do not bubble to the client
-    (the route owns the try/except in _run_crawl_isolated; here we
-    confirm the route still returned 202 even though the task ran)
+Patch ``api.routes.internal._run_crawl_isolated`` with a fake so the crawler
+dep graph never actually executes. Asserts:
+  - happy path: returns 200 with merged status + stats body
+  - slow handler returns within reasonable wall-clock
+  - exception inside the wrapper bubbles up as 500 (Cloud Scheduler will
+    retry on 5xx, which is what we want)
 """
 
 from __future__ import annotations
@@ -38,84 +37,66 @@ async def _post_crawl(app: FastAPI):
 
 
 @pytest.mark.asyncio
-async def test_invokes_background_task(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Hitting the endpoint schedules _run_crawl_isolated exactly once."""
+async def test_returns_200_with_stats(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Happy path: 200 + merged status/stats body."""
 
     monkeypatch.setenv("TREND_INTERNAL_PAT", _PAT)
     calls: list[int] = []
 
-    async def _fake() -> None:
+    async def _fake() -> dict:
         calls.append(1)
+        return {"crawl_run_id": "fake-run-1", "totals": {"inserted": 3, "updated": 1}}
 
     monkeypatch.setattr(internal_routes, "_run_crawl_isolated", _fake)
 
     resp = await _post_crawl(_make_app())
-    assert resp.status_code == 202
-    assert resp.json() == {"status": "queued"}
-    # BackgroundTasks runs after response is sent; httpx ASGITransport awaits it.
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["crawl_run_id"] == "fake-run-1"
+    assert body["totals"] == {"inserted": 3, "updated": 1}
     assert calls == [1]
 
 
 @pytest.mark.asyncio
-async def test_returns_immediately_even_if_task_slow(
+async def test_sync_handler_waits_for_completion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Response is 202; total roundtrip well under 1s even though bg sleeps."""
+    """Response only comes back after the crawl coroutine finishes."""
 
     monkeypatch.setenv("TREND_INTERNAL_PAT", _PAT)
 
-    async def _slow() -> None:
+    async def _slow() -> dict:
         await asyncio.sleep(0.05)
+        return {"crawl_run_id": "slow-1", "totals": {}}
 
     monkeypatch.setattr(internal_routes, "_run_crawl_isolated", _slow)
 
     t0 = time.perf_counter()
     resp = await _post_crawl(_make_app())
     elapsed = time.perf_counter() - t0
-    assert resp.status_code == 202
-    # 500ms is generous; the bg task only sleeps 50ms.
-    assert elapsed < 0.5
+    assert resp.status_code == 200
+    # Sync handler MUST have waited for the 50ms sleep.
+    assert elapsed >= 0.05
+    # And still well under a second.
+    assert elapsed < 1.0
 
 
 @pytest.mark.asyncio
-async def test_swallows_task_exception(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The real _run_crawl_isolated wrapper must swallow inner failures.
+async def test_returns_500_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When the crawl wrapper raises, the endpoint returns 500.
 
-    We let the real wrapper run but force ``build_repository`` to raise.
-    The wrapper's try/except logs and swallows; the route had already
-    returned 202 before the bg task ran, so the client sees 202 either
-    way — but a leaking exception would surface as a test framework
-    error from Starlette's BackgroundTasks runner.
+    Cloud Scheduler retries on 5xx, which is the behavior we want for
+    transient crawl failures.
     """
 
     monkeypatch.setenv("TREND_INTERNAL_PAT", _PAT)
 
-    # Patch the lazy imports inside _run_crawl_isolated. We can't monkeypatch
-    # crawler.app.composition before it's imported, so install a fake module
-    # in sys.modules and let the function's `from crawler...` pick it up.
-    import sys
-    import types
+    async def _boom() -> dict:
+        raise RuntimeError("boom from crawl")
 
-    fake_composition = types.ModuleType("crawler.app.composition")
-
-    def _boom_build_sources():
-        return []
-
-    def _boom_build_repository():
-        raise RuntimeError("boom from build_repository")
-
-    fake_composition.build_sources = _boom_build_sources
-    fake_composition.build_repository = _boom_build_repository
-
-    fake_orchestrator = types.ModuleType("crawler.app.orchestrator")
-
-    async def _noop_run_once(*_args, **_kwargs):  # pragma: no cover
-        return {}
-
-    fake_orchestrator.run_once = _noop_run_once
-
-    monkeypatch.setitem(sys.modules, "crawler.app.composition", fake_composition)
-    monkeypatch.setitem(sys.modules, "crawler.app.orchestrator", fake_orchestrator)
+    monkeypatch.setattr(internal_routes, "_run_crawl_isolated", _boom)
 
     resp = await _post_crawl(_make_app())
-    assert resp.status_code == 202
+    assert resp.status_code == 500
+    assert "boom" in resp.json()["detail"]
