@@ -40,7 +40,7 @@ async def test_healthz_ok_when_db_reachable(client, monkeypatch):
     deps._engine = None
     deps._sessionmaker = None
 
-    response = await client.get("/healthz")
+    response = await client.get("/api/healthz")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "db": "reachable"}
@@ -65,9 +65,16 @@ async def test_healthz_503_when_db_unreachable(client):
 
     app.dependency_overrides[get_session] = _override
     try:
-        response = await client.get("/healthz")
+        response = await client.get("/api/healthz")
     finally:
         app.dependency_overrides.pop(get_session, None)
 
     assert response.status_code == 503
     assert response.json() == {"status": "degraded", "db": "unreachable"}
+
+
+async def test_unprefixed_path_returns_404(client):
+    """Phase 4 G2 regression pin: bare ``/healthz`` must 404 — prefix moved to ``/api``."""
+
+    response = await client.get("/healthz")
+    assert response.status_code == 404

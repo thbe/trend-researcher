@@ -99,7 +99,7 @@ async def seeded_runs(monkeypatch):
 async def test_runs_returns_newest_first(client, seeded_runs):
     """5 monotonically-increasing rows → response newest-first."""
 
-    response = await client.get("/runs?limit=5")
+    response = await client.get("/api/runs?limit=5")
 
     assert response.status_code == 200
     body = response.json()
@@ -112,7 +112,7 @@ async def test_runs_returns_newest_first(client, seeded_runs):
 async def test_runs_default_limit_20(client, seeded_runs):
     """No ``?limit`` → response.limit == 20."""
 
-    response = await client.get("/runs")
+    response = await client.get("/api/runs")
 
     assert response.status_code == 200
     assert response.json()["limit"] == 20
@@ -135,8 +135,15 @@ async def test_runs_rejects_out_of_range_limit(client, bad_limit):
 
     app.dependency_overrides[get_session] = _noop_session
     try:
-        response = await client.get(f"/runs?limit={bad_limit}")
+        response = await client.get(f"/api/runs?limit={bad_limit}")
     finally:
         app.dependency_overrides.pop(get_session, None)
 
     assert response.status_code == 422
+
+
+async def test_unprefixed_path_returns_404(client):
+    """Phase 4 G2 regression pin: bare ``/runs`` must 404 — prefix moved to ``/api``."""
+
+    response = await client.get("/runs")
+    assert response.status_code == 404
