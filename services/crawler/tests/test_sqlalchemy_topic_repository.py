@@ -8,9 +8,13 @@ database is unreachable. Set TEST_DATABASE_URL to enable, e.g.::
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import select
+
+from core.models import Topic, TopicSource
 
 from crawler.adapters.persistence.sqlalchemy_topic_repository import (
     SqlAlchemyTopicRepository,
@@ -33,6 +37,7 @@ def _item(
     source_name: str = "hackernews",
     native_rank: int | None = 1,
     observed_at: datetime | None = None,
+    description: str | None = None,
 ) -> RawItem:
     return RawItem(
         title=title,
@@ -41,7 +46,24 @@ def _item(
         native_rank=native_rank,
         observed_at=observed_at or datetime.now(timezone.utc),
         raw_payload={"id": 1},
+        description=description,
     )
+
+
+def _make_decodable_cbm(publisher_url: bytes) -> str:
+    """Build a synthetic CBMi token whose payload embeds publisher_url —
+    same shape as the T03 test fixture helper. Used here so the
+    google_news write-path test doesn't depend on any live Google token."""
+    length = len(publisher_url)
+    length_bytes = bytes([length]) if length < 128 else bytes([(length & 0x7F) | 0x80, length >> 7])
+    payload = (
+        b"\x08\x13\x22"
+        + length_bytes
+        + publisher_url
+        + b"\xd2\x01\x20trailing-junk-bytes-here-pad"
+    )
+    encoded = base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+    return f"https://news.google.com/rss/articles/CBMi{encoded}?oc=5"
 
 
 async def test_insert_new_round_trip(session_factory):
@@ -148,3 +170,138 @@ async def test_find_candidates_orders_by_last_seen_desc(session_factory):
     assert len(candidates) == 3
     # Most-recent first → reverse insert order.
     assert [c.id for c in candidates] == list(reversed(ids))
+
+
+# ---------------------------------------------------------------------------
+# Plan 04.5-01 / T04 — description plumb-through + resolved_url write path.
+# ---------------------------------------------------------------------------
+
+
+async def test_insert_new_persists_description(session_factory):
+    """RawItem.description lands on Topic.description on first insert
+    (ING-010 / D-Q1)."""
+    repo = SqlAlchemyTopicRepository(session_factory)
+    topic_id = await repo.insert_new(
+        _item(
+            title="Item with description",
+            url="https://example.com/desc",
+            description="A short standfirst from the source feed.",
+        )
+    )
+
+    async with session_factory() as session:
+        row = (await session.execute(select(Topic).where(Topic.id == str(topic_id)))).scalar_one()
+    assert row.description == "A short standfirst from the source feed."
+
+
+async def test_update_existing_keeps_first_description(session_factory):
+    """Re-observation must NOT overwrite a non-NULL Topic.description
+    (D-Q1 first-non-empty merge). Operator chose stability over freshness."""
+    repo = SqlAlchemyTopicRepository(session_factory)
+    base = datetime.now(timezone.utc)
+
+    topic_id = await repo.insert_new(
+        _item(
+            title="Stable framing test",
+            url="https://example.com/s1",
+            description="First framing wins.",
+            observed_at=base,
+        )
+    )
+
+    await repo.update_existing(
+        topic_id,
+        _item(
+            title="Stable framing test",
+            url="https://example.com/s2",
+            description="A totally different second framing that must NOT win.",
+            observed_at=base + timedelta(seconds=10),
+        ),
+    )
+
+    async with session_factory() as session:
+        row = (await session.execute(select(Topic).where(Topic.id == str(topic_id)))).scalar_one()
+    assert row.description == "First framing wins."
+
+
+async def test_update_existing_fills_null_description(session_factory):
+    """Symmetric proof of D-Q1: if the first observation had no description
+    (e.g. HN), a later observation that DOES carry one should fill the NULL.
+    This is the 'first-non-empty' part — NULL is treated as 'not yet set'."""
+    repo = SqlAlchemyTopicRepository(session_factory)
+    base = datetime.now(timezone.utc)
+
+    topic_id = await repo.insert_new(
+        _item(
+            title="Cross-source merge test",
+            url="https://example.com/hn-first",
+            source_name="hackernews",
+            description=None,
+            observed_at=base,
+        )
+    )
+
+    await repo.update_existing(
+        topic_id,
+        _item(
+            title="Cross-source merge test",
+            url="https://example.com/rss-second",
+            source_name="nyt_homepage",
+            description="Now we have a summary from RSS.",
+            observed_at=base + timedelta(seconds=10),
+        ),
+    )
+
+    async with session_factory() as session:
+        row = (await session.execute(select(Topic).where(Topic.id == str(topic_id)))).scalar_one()
+    assert row.description == "Now we have a summary from RSS."
+
+
+async def test_google_news_source_writes_resolved_url(session_factory):
+    """For source_name='google_news', topic_sources.resolved_url is the
+    decoded publisher URL; topic_sources.url stays AS-IS (the CBM token)."""
+    repo = SqlAlchemyTopicRepository(session_factory)
+    publisher = b"https://www.bbc.co.uk/news/world-europe-99999"
+    cbm_url = _make_decodable_cbm(publisher)
+
+    topic_id = await repo.insert_new(
+        _item(
+            title="Decodable google news item",
+            url=cbm_url,
+            source_name="google_news",
+            description="GN summary.",
+        )
+    )
+
+    async with session_factory() as session:
+        src = (
+            await session.execute(
+                select(TopicSource).where(TopicSource.topic_id == str(topic_id))
+            )
+        ).scalar_one()
+    assert src.url == cbm_url, "original CBM token must be preserved verbatim"
+    assert src.resolved_url == publisher.decode("ascii"), (
+        f"resolved_url should be the decoded publisher URL, got {src.resolved_url!r}"
+    )
+
+
+async def test_non_google_source_leaves_resolved_url_null(session_factory):
+    """Non-google_news sources never invoke the decoder; resolved_url stays
+    NULL even when url happens to be a CBM-shaped token (defensive)."""
+    repo = SqlAlchemyTopicRepository(session_factory)
+    topic_id = await repo.insert_new(
+        _item(
+            title="NYT item",
+            url="https://www.nytimes.com/2026/05/18/foo.html",
+            source_name="nyt_homepage",
+            description="NYT standfirst.",
+        )
+    )
+
+    async with session_factory() as session:
+        src = (
+            await session.execute(
+                select(TopicSource).where(TopicSource.topic_id == str(topic_id))
+            )
+        ).scalar_one()
+    assert src.resolved_url is None
