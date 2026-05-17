@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-discussing
-stopped_at: Phase 4.5 (Topic Description Capture & URL Resolution) discuss-phase opened. INSERTED phase triggered by operator m1086 'I can only see the headline, isn't there more context available for analysis?'. Scope grounded against live system — found that (1) topics.description column already exists in schema, (2) entry.summary is already extracted into topic_sources.raw_payload by rss.py:109 so the description bytes are sitting in the DB for all 167 production rows, (3) Google News URLs are CBM-base64 redirect tokens (verified live), (4) RawItem needs additive description field, (5) single Topic creation site at sqlalchemy_topic_repository.py:67. DISCUSSION-LOG.md written with Q1-Q5 operator decisions needed (merge strategy, backfill mechanism, Google News URL resolution strategy, resolved_url column shape, SPA rendering scope). Default recommendations published for each. Awaiting operator answers before /gsd-plan-phase.
-last_updated: "2026-05-17T18:30:00.000Z"
-last_activity: 2026-05-17 -- Phase 4.5 discuss-phase opened; DISCUSSION-LOG.md written; awaiting Q1-Q5 operator answers
+status: phase-planned
+stopped_at: Phase 4.5 plan locked. Single-plan phase (04.5-01) with 6 sequential tasks in Wave 1 — all type=auto. Grounded against live system (167 production rows, topics.description column already in schema, entry.summary already in topic_sources.raw_payload, Google News CBM-base64 redirect tokens verified live). Locked decisions: D-Q1=first-non-empty merge, D-Q2=one-shot scripts/backfill_descriptions.py (idempotent WHERE description IS NULL), D-Q3=hybrid base64-decode + store-as-is fallback with structlog warn, D-Q4=new Alembic 0004 adding topic_sources.resolved_url nullable, D-Q5=SPA TopicList truncated subtitle + TopicDetail paragraph + source link uses resolved_url. Plan validated: gsd-sdk verify.plan-structure → valid:true, 6 tasks all complete (hasFiles/hasAction/hasVerify/hasDone); frontmatter.validate --schema plan → valid:true. ARC-001 preserved (no AI in ingest, no new outbound HTTP). Single Alembic migration. cloudbuild image tag will bump v0.4.1 → v0.5.0 via TAG_NAME substitution. STATE flips to phase-complete after execute-phase.
+last_updated: "2026-05-17T21:34:21.000Z"
+last_activity: Phase 4.5 plan locked: 04.5-01 produced
 progress:
   total_phases: 9
   completed_phases: 4

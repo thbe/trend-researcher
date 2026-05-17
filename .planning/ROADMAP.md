@@ -139,7 +139,7 @@ Plans:
   7. Existing rows backfill from next crawl naturally (no separate backfill job)
 
 Plans:
-- [ ] 04.5-01: TBD (scoped during discuss-phase)
+- [ ] 04.5-01: Topic description capture + Google News URL resolution + backfill (Wave 1, 6 tasks, autonomous)
 
 ### Phase 5: Topic Detail & Crawl Config UI
 **Goal**: Make individual topics inspectable (sources, raw payloads where relevant) and let the operator manage crawl scope — enable/disable sources and tune per-source `N` — from the UI without editing config files. Introduces the `crawl_config` Postgres table as the single source of truth for mutable crawl settings.
@@ -230,7 +230,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 4.5 → 5 → 6 → 7 �
 | 2. Multi-Source Ingest | 4/4 | Complete | 2026-05-15 |
 | 3. Scheduler & Ops Baseline | 5/5 | Complete | 2026-05-16 |
 | 4. Topic API & UI Shell | 6/6 | Complete | 2026-05-17 |
-| 4.5. Topic Description Capture & URL Resolution | 0/TBD | Discussing | - |
+| 4.5. Topic Description Capture & URL Resolution | 0/1 | Planned | - |
 | 5. Topic Detail & Crawl Config UI | 0/TBD | Not started | - |
 | 6. AI Assessment Foundation | 0/TBD | Not started | - |
 | 7. Business-Case Generation | 0/TBD | Not started | - |

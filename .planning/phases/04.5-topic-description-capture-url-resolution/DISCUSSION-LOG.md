@@ -179,8 +179,25 @@ If operator picks non-default answers, plan shape may flex (e.g., Q3=B "HEAD fol
 
 ---
 
-## Awaiting Operator Input
-Please answer Q1, Q2, Q3, Q4, Q5 above. Once locked, I'll:
-1. Append a "Decisions Locked" section to this file with the chosen options + 1-line rationale per choice.
-2. Open `/gsd-plan-phase` to produce `04.5-01-PLAN.md`.
-3. Update `STATE.md` `status: phase-planning` and `ROADMAP.md` plan list with the locked plan name.
+## Decisions Locked (2026-05-17, operator: "defaults")
+
+Operator accepted all five default recommendations in one line.
+
+| Q   | Decision                                                                                          | Rationale (1-liner)                                                                                                |
+| --- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Q1  | **A — first-non-empty wins**                                                                      | Preserves the earliest editor framing; safest under noisy re-observations; matches operator instinct to keep context stable. |
+| Q2  | **A — one-shot `scripts/backfill_descriptions.py`**                                               | Idempotent, runnable locally + in prod via `gcloud run jobs` later; keeps Alembic limited to schema only.            |
+| Q3  | **D — hybrid: base64-decode primary, store-as-is fallback w/ structlog warn**                       | Honors no-new-HTTP; degrades gracefully when Google rotates the CBM scheme.                                          |
+| Q4  | **B — new nullable `topic_sources.resolved_url` column (Alembic 0004)**                             | Avoids dedup risk against `url` (the index key); makes "what we resolved" auditable.                                 |
+| Q5  | **Ship TopicList truncated subtitle + TopicDetail paragraph + source-link uses `resolved_url`**     | Highest signal-per-pixel for the operator's "more context for analysis" need; "(via Google News)" hint deferred.    |
+
+### Plan shape now LOCKED
+
+Single plan **04.5-01: Topic description capture + Google News URL resolution + backfill** with 6 tasks (T01–T06 as proposed above). No flex required.
+
+### Next steps
+1. Run `/gsd-plan-phase` to produce `.planning/phases/04.5-topic-description-capture-url-resolution/04.5-01-PLAN.md`.
+2. Update `STATE.md` `status: phase-discussing → phase-planned`.
+3. Update `ROADMAP.md` Phase 4.5 plan list with the locked plan name (replace `04.5-01 TBD`).
+4. Commit + offer push.
+5. Await `/gsd-execute-phase` trigger.
