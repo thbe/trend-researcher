@@ -109,6 +109,12 @@ class RssSource:
                 "summary": entry.get("summary"),
             }
 
+            # Plan 04.5-01 (ING-010): plumb the RSS <description>/summary text
+            # onto RawItem so it can land in topics.description. We keep the
+            # raw value in raw_payload above (it's the read source for the
+            # one-shot backfill script in scripts/backfill_descriptions.py).
+            summary = (entry.get("summary") or "").strip() or None
+
             items.append(
                 RawItem(
                     title=title,
@@ -117,6 +123,7 @@ class RssSource:
                     native_rank=rank,
                     observed_at=observed_at,
                     raw_payload=payload,
+                    description=summary,
                 )
             )
         return items

@@ -133,3 +133,62 @@ async def test_user_agent_header_set() -> None:
     await client.aclose()
 
     assert captured.get("headers", {}).get("user-agent") == _UA
+
+
+# --- Plan 04.5-01 / T01 (ING-010): RawItem.description plumbed from <description> ---
+
+_FIXTURE_RSS_EMPTY_SUMMARY = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Test Feed</title>
+    <link>https://example.com</link>
+    <description>A test feed</description>
+    <item>
+      <title>Empty-summary headline</title>
+      <link>https://example.com/article-empty</link>
+      <pubDate>Mon, 06 Jan 2020 09:00:00 GMT</pubDate>
+      <description>   </description>
+    </item>
+    <item>
+      <title>No-summary-tag headline</title>
+      <link>https://example.com/article-nosumtag</link>
+      <pubDate>Mon, 06 Jan 2020 10:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
+"""
+
+
+async def test_description_populated_from_summary() -> None:
+    """When the feed entry has a non-empty <description>, RawItem.description
+    carries it verbatim (whitespace trimmed)."""
+    client = _make_client(_FIXTURE_RSS)
+    src = RssSource(
+        name="nyt_homepage",
+        feed_url="https://example.com/rss",
+        http_client=client,
+    )
+    items = await src.fetch(top_n=10)
+    await client.aclose()
+
+    # The 3 surviving items (1, 2, 4) all carry non-empty <description>.
+    assert items[0].description == "Summary one."
+    assert items[1].description == "Summary two."
+    assert items[2].description == "Summary four."
+
+
+async def test_description_is_none_when_summary_missing_or_blank() -> None:
+    """Whitespace-only and missing-tag summaries collapse to None (so the
+    repository's first-non-empty merge doesn't accidentally overwrite a
+    real description with whitespace)."""
+    client = _make_client(_FIXTURE_RSS_EMPTY_SUMMARY)
+    src = RssSource(
+        name="nyt_homepage",
+        feed_url="https://example.com/rss",
+        http_client=client,
+    )
+    items = await src.fetch(top_n=10)
+    await client.aclose()
+
+    assert len(items) == 2
+    assert all(it.description is None for it in items)

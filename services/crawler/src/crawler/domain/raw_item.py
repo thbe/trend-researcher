@@ -27,6 +27,13 @@ class RawItem:
             observed by the crawler.
         raw_payload: Source-specific JSON-able dict, persisted as JSONB
             for later inspection. Never read by domain logic.
+        description: Optional short summary / standfirst captured from the
+            source feed (e.g. RSS ``<description>``). Plumbed end-to-end to
+            ``topics.description`` so the SPA can render context beyond the
+            headline. ``None`` when the source does not carry summary text
+            (e.g. the Hacker News JSON adapter). Additive in Plan 04.5-01
+            (ING-010) — first-non-empty merge wins on re-observation; see
+            ``SqlAlchemyTopicRepository._bump_topic``.
     """
 
     title: str
@@ -35,3 +42,4 @@ class RawItem:
     native_rank: int | None
     observed_at: datetime
     raw_payload: dict[str, Any] = field(default_factory=dict)
+    description: str | None = None
