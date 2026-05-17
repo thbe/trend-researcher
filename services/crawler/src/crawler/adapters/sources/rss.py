@@ -48,10 +48,17 @@ class RssSource:
         feed_url: str,
         *,
         http_client: httpx.AsyncClient | None = None,
+        capture_summary: bool = True,
     ) -> None:
         self.name = name
         self._feed_url = feed_url
         self._http_client = http_client
+        # Plan 04.5.1: when False, force ``RawItem.description=None`` regardless of
+        # feed content. Used to drop Google News' related-articles ``<ol><li><a>``
+        # HTML fragments which masquerade as descriptions but are link lists, not
+        # publisher prose. The raw value still lands in ``raw_payload['summary']``
+        # so we keep full forensic fidelity.
+        self._capture_summary = capture_summary
 
     async def fetch(self, top_n: int) -> list[RawItem]:
         """Return up to ``top_n`` items from the feed, in feed order."""
@@ -113,7 +120,10 @@ class RssSource:
             # onto RawItem so it can land in topics.description. We keep the
             # raw value in raw_payload above (it's the read source for the
             # one-shot backfill script in scripts/backfill_descriptions.py).
+            # Plan 04.5.1: source-level opt-out for Google News (link-list HTML).
             summary = (entry.get("summary") or "").strip() or None
+            if not self._capture_summary:
+                summary = None
 
             items.append(
                 RawItem(

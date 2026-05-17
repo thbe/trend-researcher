@@ -38,15 +38,20 @@ from crawler.ports import CrawlRunRepositoryPort, SourcePort, TopicRepositoryPor
 #       Phase 3+ follow-up — see CONTEXT.md "Reddit access reality").
 # See .planning/phases/02-multi-source-ingest/CONTEXT.md for full discussion.
 
-# (source_name, feed_url) — RSS / Atom feeds.
-_RSS_SOURCES: list[tuple[str, str]] = [
+# (source_name, feed_url, capture_summary) — RSS / Atom feeds.
+# capture_summary=False suppresses ``RawItem.description`` for sources whose
+# ``<description>`` is structurally NOT publisher prose (e.g. Google News
+# ships an ``<ol><li><a>`` related-articles HTML fragment). Plan 04.5.1.
+_RSS_SOURCES: list[tuple[str, str, bool]] = [
     (
         "nyt_homepage",
         "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+        True,
     ),
     (
         "google_news",
         "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
+        False,
     ),
 ]
 
@@ -83,7 +88,8 @@ def build_sources() -> list[SourcePort]:
     """
     sources: list[SourcePort] = [HackerNewsSource()]
     sources.extend(
-        RssSource(name=name, feed_url=url) for name, url in _RSS_SOURCES
+        RssSource(name=name, feed_url=url, capture_summary=capture)
+        for name, url, capture in _RSS_SOURCES
     )
 
     raw = os.environ.get("CRAWLER_DISABLED_SOURCES")

@@ -192,3 +192,50 @@ async def test_description_is_none_when_summary_missing_or_blank() -> None:
 
     assert len(items) == 2
     assert all(it.description is None for it in items)
+
+
+# ---------------------------------------------------------------------------
+# Plan 04.5.1: capture_summary=False drops descriptions at parse time.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_capture_summary_false_drops_description():
+    """Sources registered with capture_summary=False yield description=None.
+
+    Used by Google News whose RSS <description> is an HTML link-list, not
+    publisher prose. The raw value still lands in raw_payload['summary'] for
+    forensic fidelity — only the topic-level RawItem.description is suppressed.
+    """
+    client = _make_client(_FIXTURE_RSS)
+    source = RssSource(
+        name="link_list_source",
+        feed_url="https://example.com/rss",
+        http_client=client,
+        capture_summary=False,
+    )
+    items = await source.fetch(top_n=10)
+
+    assert len(items) == 3  # same 3 valid items as the default fixture run
+    for item in items:
+        assert item.description is None, (
+            f"capture_summary=False must zero out description, got {item.description!r}"
+        )
+        # forensic fidelity: raw_payload still carries summary
+        assert "summary" in item.raw_payload
+
+
+@pytest.mark.asyncio
+async def test_capture_summary_default_true_preserves_description():
+    """Default behaviour unchanged: capture_summary defaults to True."""
+    client = _make_client(_FIXTURE_RSS)
+    source = RssSource(
+        name="prose_source",
+        feed_url="https://example.com/rss",
+        http_client=client,
+    )
+    items = await source.fetch(top_n=10)
+
+    assert len(items) == 3
+    # First item's description from fixture is "Summary one."
+    assert items[0].description == "Summary one."
