@@ -57,4 +57,53 @@ class RunsListResponse(BaseModel):
     limit: int
 
 
-__all__ = ["HealthzResponse", "RunResponse", "RunsListResponse"]
+class TopicResponse(BaseModel):
+    """One ``topics`` row as JSON, enriched with derived ``v_topic_stats`` columns.
+
+    Field set mirrors ``core.models.Topic`` (excluding ``topic_metadata`` and
+    ``created_at``/``updated_at``, which are list-view noise per G5) plus the
+    two derived columns from the ``v_topic_stats`` view. ``observation_count``
+    comes from ``topics`` (already maintained by the crawler); ``breadth`` and
+    ``longevity_seconds`` come from the view (single source of truth, STO-006).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    """``topics.id`` UUID (pgcrypto-generated)."""
+    title: str
+    """``topics.title`` canonical headline."""
+    description: str | None
+    """``topics.description`` optional summary."""
+    first_seen_at: datetime
+    """``topics.first_seen_at`` earliest source observation timestamp."""
+    last_seen_at: datetime
+    """``topics.last_seen_at`` most-recent source observation timestamp."""
+    observation_count: int
+    """``topics.observation_count`` total source observations recorded (not distinct)."""
+    breadth: int
+    """``v_topic_stats.breadth`` = COUNT DISTINCT ``topic_sources.source_name`` for this topic."""
+    longevity_seconds: int
+    """``v_topic_stats.longevity_seconds`` = EXTRACT(EPOCH FROM (last_seen_at - first_seen_at))::bigint."""
+
+
+class TopicsListResponse(BaseModel):
+    """Wrapper for ``GET /api/topics`` so the JSON shape is an object, not a bare array.
+
+    ``limit`` echoes back the (validated) page size; ``sort`` echoes back the
+    (validated) sort key including any leading ``-`` for desc. Operators can
+    sanity-check both against what they sent.
+    """
+
+    topics: list[TopicResponse]
+    limit: int
+    sort: str
+
+
+__all__ = [
+    "HealthzResponse",
+    "RunResponse",
+    "RunsListResponse",
+    "TopicResponse",
+    "TopicsListResponse",
+]
