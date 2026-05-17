@@ -59,6 +59,13 @@ services:
       LOG_FORMAT: json
     ports:
       - "8000:8000"
+    volumes:
+      # G9 persistence: dumps land here. Compose uses external Postgres, so
+      # the dump path is mostly exercised by the prod image (Cloud Run + GCS),
+      # but mounting a volume lets local testing of pg-dump-rotate.sh work too.
+      - appdata:/app/data
+    # Give cleanup() trap enough wall-clock to run final dump + pg_ctl stop.
+    stop_grace_period: 30s
     restart: unless-stopped
 
   scheduler:
@@ -80,3 +87,4 @@ services:
 
 volumes:
   postgres_data:
+  appdata:

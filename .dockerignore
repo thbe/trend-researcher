@@ -1,0 +1,31 @@
+# Build context exclusions for trend-researcher container builds.
+# Keeps web-builder and python-builder stages fast and image small.
+
+# Frontend artefacts (rebuilt in web-builder stage)
+web/node_modules
+web/dist
+web/.vite
+
+# Python caches and venvs
+**/__pycache__
+**/.pytest_cache
+**/.venv
+**/.mypy_cache
+**/.ruff_cache
+**/*.pyc
+
+# Logs and local data
+**/*.log
+data/
+
+# Repo metadata not needed at build time
+.git
+.gitignore
+.github
+.planning
+.opencode
+
+# Local secrets
+.env
+.env.*
+!.env.example
