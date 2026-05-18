@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { listTopics, type Topic } from '@/api/topics'
+import { assessBatch } from '@/api/assessment'
 import { ApiError } from '@/api/client'
 import { formatLongevity, formatRelative } from '@/lib/format'
 
@@ -114,6 +115,42 @@ function onRowClick(_event: Event, row: { item: Topic }) {
   router.push({ name: 'topic-detail', params: { id: row.item.id } })
 }
 
+const crawling = ref(false)
+const assessing = ref(false)
+const actionMessage = ref<string | null>(null)
+
+async function triggerCrawl() {
+  crawling.value = true
+  actionMessage.value = null
+  try {
+    const resp = await fetch('/api/internal/crawl', { method: 'POST' })
+    if (!resp.ok) throw new Error(`Crawl failed: ${resp.status}`)
+    const data = await resp.json()
+    actionMessage.value = `Crawl complete — ${data.new_topics ?? 0} new, ${data.updated_topics ?? 0} updated`
+    // Reload topics
+    void load({ page: 1, itemsPerPage: itemsPerPage.value, sortBy: sortBy.value })
+  } catch (e) {
+    actionMessage.value = `Crawl error: ${(e as Error).message}`
+  } finally {
+    crawling.value = false
+  }
+}
+
+async function triggerAssess() {
+  assessing.value = true
+  actionMessage.value = null
+  try {
+    const data = await assessBatch()
+    actionMessage.value = `Assessed ${data.assessed} topics — ${data.relevant} relevant`
+    // Reload topics to show updated verdicts
+    void load({ page: 1, itemsPerPage: itemsPerPage.value, sortBy: sortBy.value })
+  } catch (e) {
+    actionMessage.value = `Assessment error: ${(e as Error).message}`
+  } finally {
+    assessing.value = false
+  }
+}
+
 onMounted(() => {
   void load({
     page: 1,
@@ -132,7 +169,37 @@ onMounted(() => {
           {{ subtitleText }} · sorted {{ echoedSort }}
         </div>
       </div>
+      <v-spacer />
+      <v-btn
+        color="primary"
+        variant="tonal"
+        :loading="crawling"
+        :disabled="crawling || assessing"
+        class="mr-2"
+        @click="triggerCrawl"
+      >
+        Refresh Topics
+      </v-btn>
+      <v-btn
+        color="secondary"
+        variant="tonal"
+        :loading="assessing"
+        :disabled="crawling || assessing"
+        @click="triggerAssess"
+      >
+        Assess Topics
+      </v-btn>
     </div>
+
+    <v-alert
+      v-if="actionMessage"
+      type="info"
+      variant="tonal"
+      density="comfortable"
+      closable
+      class="mb-4"
+      :text="actionMessage"
+    />
 
     <v-alert
       v-if="error"
