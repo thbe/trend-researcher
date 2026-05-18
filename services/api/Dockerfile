@@ -82,6 +82,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY packages/core packages/core
 COPY services/api services/api
 COPY services/crawler services/crawler
+COPY services/assessor services/assessor
 
 # Install the api package itself (+ workspace deps in-place).
 RUN --mount=type=cache,target=/root/.cache/uv \
