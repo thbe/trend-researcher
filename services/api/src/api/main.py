@@ -4,6 +4,7 @@ Exposes three operational/product routes:
 - ``GET /api/healthz`` — liveness + DB ping (operational)
 - ``GET /api/runs`` — last N ``crawl_runs`` rows newest-first (operational)
 - ``GET /api/topics`` — paginated topic list w/ derived stats (product, Phase 4)
+- ``POST /api/login`` — authenticate and set session cookie (v0.5.2)
 
 All routes are under ``/api/*`` (CONTEXT G2) so the SPA catch-all at ``/``
 (mounted below via StaticFiles when ``WEB_DIST_DIR`` is set) doesn't swallow
@@ -19,6 +20,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+import core
+from api.auth.middleware import AuthMiddleware
+from api.auth.seed import ensure_seed_user
 from api.dependencies import dispose_engine, get_web_dist_dir
 from api.middleware.dump_debouncer import (
     DumpDebouncerMiddleware,
@@ -28,11 +32,24 @@ from api.routes import healthz as healthz_routes
 from api.routes import internal as internal_routes
 from api.routes import runs as runs_routes
 from api.routes import topics as topics_routes
+from api.routes import auth as auth_routes
 
 
 @asynccontextmanager
 async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
-    """Lifespan handler: nothing to warm up; dispose engine on shutdown."""
+    """Lifespan handler: seed user on startup; dispose engine on shutdown."""
+
+    # Seed the configured user into the users table
+    settings = core.get_settings()
+    engine = core.get_engine(settings.database_url)
+    session_factory = core.get_sessionmaker(engine)
+    async with session_factory() as session:
+        await ensure_seed_user(
+            session,
+            username=settings.auth_seed_username,
+            password=settings.auth_seed_password,
+        )
+    await engine.dispose()
 
     yield
     await dispose_engine()
@@ -45,9 +62,14 @@ app = FastAPI(
 )
 
 app.include_router(healthz_routes.router, prefix="/api")
+app.include_router(auth_routes.router, prefix="/api")
 app.include_router(runs_routes.router, prefix="/api")
 app.include_router(topics_routes.router, prefix="/api")
 app.include_router(internal_routes.router, prefix="/api")
+
+# Auth middleware: protects all /api/* except /api/login and /api/healthz
+_settings = core.get_settings()
+app.add_middleware(AuthMiddleware, secret_key=_settings.auth_secret_key)
 
 # Register the post-write debouncer when DB_DUMP_SCRIPT is configured (prod
 # container). Local dev / pytest leaves it unset, so no subprocess fires.

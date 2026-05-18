@@ -18,7 +18,7 @@ Notes
 
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, Index, Integer, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -197,4 +197,30 @@ class CrawlRun(Base):
     )
 
 
-__all__ = ["Base", "Topic", "TopicSource", "CrawlRun"]
+class User(Base):
+    """Application user for login-page authentication (v0.5.2).
+
+    Passwords are stored as bcrypt hashes. The seed user is upserted on app
+    startup from AUTH_SEED_USERNAME / AUTH_SEED_PASSWORD env vars.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    username: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+    created_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+
+__all__ = ["Base", "CrawlRun", "Topic", "TopicSource", "User"]

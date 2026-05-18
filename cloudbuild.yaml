@@ -37,7 +37,7 @@
 #
 #   6. Manual build submission (always use --region to avoid global fallback):
 #        gcloud builds submit --config=cloudbuild.yaml --region=europe-west2 \
-#          --substitutions=TAG_NAME=v0.5.1,COMMIT_SHA=$(git rev-parse --short HEAD)
+#          --substitutions=TAG_NAME=v0.5.2,COMMIT_SHA=$(git rev-parse --short HEAD)
 #
 #      Current release line: v0.5.1 (Plan 04.5.1 — Google News description
 #      skip at parser level + one-shot cleanup of dirty rows from v0.5.0
@@ -122,8 +122,8 @@ steps:
       - --timeout=600
       - --min-instances=0
       - --max-instances=1
-      - --set-env-vars=BUILD_VERSION=$TAG_NAME,BUILD_COMMIT=$COMMIT_SHA,BUILD_TIME=$BUILD_ID,CRAWLER_TOP_N=100,LOG_FORMAT=json
-      - --set-secrets=TREND_INTERNAL_PAT=trend-internal-pat:latest
+      - --set-env-vars=BUILD_VERSION=$TAG_NAME,BUILD_COMMIT=$COMMIT_SHA,BUILD_TIME=$BUILD_ID,CRAWLER_TOP_N=100,LOG_FORMAT=json,AUTH_SEED_USERNAME=admin
+      - --set-secrets=TREND_INTERNAL_PAT=trend-internal-pat:latest,AUTH_SEED_PASSWORD=trend-auth-password:latest,AUTH_SECRET_KEY=trend-auth-secret:latest
       - --add-volume=name=data-volume,type=cloud-storage,bucket=${_DATA_BUCKET},readonly=false
       - --add-volume-mount=volume=data-volume,mount-path=/app/data
 

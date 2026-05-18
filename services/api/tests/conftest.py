@@ -21,6 +21,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from api.auth.middleware import COOKIE_NAME, create_session_cookie
 from api.main import app
 
 
@@ -50,10 +51,18 @@ def db_available() -> bool:
 
 @pytest_asyncio.fixture
 async def client() -> AsyncIterator[AsyncClient]:
-    """In-process ASGI client — no uvicorn, no real port."""
+    """In-process ASGI client — no uvicorn, no real port.
+
+    Injects a valid session cookie so protected routes are accessible.
+    """
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
+    cookie = create_session_cookie("test-user", "dev-secret-change-in-production", 24)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        cookies={COOKIE_NAME: cookie},
+    ) as c:
         yield c
 
 

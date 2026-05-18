@@ -15,6 +15,14 @@ class Settings(BaseSettings):
 
     database_url: str
 
+    # Auth: seed user credentials (upserted on app startup)
+    auth_seed_username: str = "admin"
+    auth_seed_password: str = "changeme"
+
+    # Auth: session cookie signing key (random default for dev; override in prod)
+    auth_secret_key: str = "dev-secret-change-in-production"
+    auth_session_ttl_hours: int = 24
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
