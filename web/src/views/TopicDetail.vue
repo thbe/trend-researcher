@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getTopic, type TopicDetail } from '@/api/topics'
+import { assessTopic } from '@/api/assessment'
 import { ApiError } from '@/api/client'
 import { formatLongevity, formatRelative } from '@/lib/format'
 
@@ -65,6 +66,23 @@ async function load() {
 
 function goBack() {
   router.push({ name: 'topics' })
+}
+
+const assessing = ref(false)
+const assessResult = ref<Record<string, unknown> | null>(null)
+const assessError = ref<string | null>(null)
+
+async function runAssess() {
+  assessing.value = true
+  assessError.value = null
+  assessResult.value = null
+  try {
+    assessResult.value = await assessTopic(props.id)
+  } catch (err) {
+    assessError.value = (err as Error).message
+  } finally {
+    assessing.value = false
+  }
 }
 
 onMounted(load)
@@ -146,6 +164,46 @@ watch(() => props.id, load)
             </template>
           </v-expansion-panel>
         </v-expansion-panels>
+
+        <div class="text-h6 mt-6 mb-2">
+          AI Assessment
+        </div>
+        <div class="d-flex align-center mb-3">
+          <v-btn
+            color="primary"
+            size="small"
+            prepend-icon="mdi-brain"
+            :loading="assessing"
+            :disabled="assessing"
+            @click="runAssess"
+          >
+            Assess Topic
+          </v-btn>
+        </div>
+        <v-alert
+          v-if="assessError"
+          type="error"
+          variant="tonal"
+          density="comfortable"
+          class="mb-3"
+          :text="assessError"
+        />
+        <v-card v-if="assessResult" variant="outlined" class="mb-4">
+          <v-card-text>
+            <div class="d-flex align-center mb-2">
+              <v-chip
+                :color="assessResult.relevance_verdict === 'relevant' ? 'success' : 'grey'"
+                variant="tonal"
+                label
+                class="mr-3"
+              >
+                {{ assessResult.relevance_verdict }}
+              </v-chip>
+              <span class="text-caption text-medium-emphasis">{{ assessResult.model_used }}</span>
+            </div>
+            <p class="text-body-2">{{ assessResult.relevance_reason }}</p>
+          </v-card-text>
+        </v-card>
 
         <div class="text-h6 mt-6 mb-2">
           Sources ({{ topic.sources.length }})

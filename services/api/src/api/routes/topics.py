@@ -42,7 +42,7 @@ from api.schemas import (
     TopicSourceResponse,
     TopicsListResponse,
 )
-from core.models import Topic, TopicSource
+from core.models import Topic, TopicSource, BusinessCase
 
 router = APIRouter()
 
@@ -100,6 +100,17 @@ async def list_topics(
     order_col = _SORT_COLUMNS[key]
     order_expr = order_col.desc() if desc else order_col.asc()
 
+    # Subquery: latest business case verdict per topic
+    latest_verdict = (
+        select(BusinessCase.relevance_verdict)
+        .where(BusinessCase.topic_id == Topic.id)
+        .order_by(BusinessCase.generated_at.desc())
+        .limit(1)
+        .correlate(Topic)
+        .scalar_subquery()
+        .label("relevance_verdict")
+    )
+
     stmt = (
         select(
             Topic.id,
@@ -110,6 +121,7 @@ async def list_topics(
             Topic.observation_count,
             _v_topic_stats.c.breadth,
             _v_topic_stats.c.longevity_seconds,
+            latest_verdict,
         )
         .select_from(
             Topic.__table__.outerjoin(  # type: ignore[attr-defined]

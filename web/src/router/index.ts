@@ -27,6 +27,11 @@ const routes: RouteRecordRaw[] = [
     name: 'crawl-config',
     component: () => import('@/views/CrawlConfig.vue'),
   },
+  {
+    path: '/assessment',
+    name: 'assessment',
+    component: () => import('@/views/Assessment.vue'),
+  },
 ]
 
 const router = createRouter({

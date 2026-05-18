@@ -85,6 +85,8 @@ class TopicResponse(BaseModel):
     """``v_topic_stats.breadth`` = COUNT DISTINCT ``topic_sources.source_name`` for this topic."""
     longevity_seconds: int
     """``v_topic_stats.longevity_seconds`` = EXTRACT(EPOCH FROM (last_seen_at - first_seen_at))::bigint."""
+    relevance_verdict: str | None = None
+    """Latest business_cases.relevance_verdict for this topic (NULL if unassessed)."""
 
 
 class TopicsListResponse(BaseModel):

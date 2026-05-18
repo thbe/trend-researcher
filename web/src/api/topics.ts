@@ -13,6 +13,7 @@ export interface Topic {
   observation_count: number
   breadth: number
   longevity_seconds: number
+  relevance_verdict: string | null
 }
 
 export interface TopicSource {

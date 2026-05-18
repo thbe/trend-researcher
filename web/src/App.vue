@@ -12,6 +12,7 @@
       </v-app-bar-title>
       <template #append>
         <v-btn to="/topics" variant="text">Topics</v-btn>
+        <v-btn to="/assessment" variant="text">Assessment</v-btn>
         <v-btn to="/config" variant="text">Config</v-btn>
       </template>
     </v-app-bar>

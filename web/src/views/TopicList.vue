@@ -36,6 +36,7 @@ const SORT_KEY_MAP: Record<string, string> = {
 const headers = [
   { title: 'Title', key: 'title', sortable: false },
   { title: 'Description', key: 'description', sortable: false },
+  { title: 'Verdict', key: 'relevance_verdict', sortable: false, width: '120px' },
   { title: 'Sources', key: 'breadth', align: 'end' as const, sortable: true },
   {
     title: 'Observed',
@@ -165,6 +166,18 @@ onMounted(() => {
           truncate(item.description)
         }}</span>
         <em v-else class="text-disabled">—</em>
+      </template>
+      <template #item.relevance_verdict="{ item }">
+        <v-chip
+          v-if="item.relevance_verdict"
+          :color="item.relevance_verdict === 'relevant' ? 'success' : 'grey'"
+          size="small"
+          variant="tonal"
+          label
+        >
+          {{ item.relevance_verdict }}
+        </v-chip>
+        <span v-else class="text-disabled">—</span>
       </template>
       <template #item.longevity_seconds="{ item }">
         {{ formatLongevity(item.longevity_seconds) }}
