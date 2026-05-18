@@ -250,4 +250,41 @@ class CrawlConfig(Base):
     )
 
 
-__all__ = ["Base", "CrawlConfig", "CrawlRun", "Topic", "TopicSource", "User"]
+class BusinessCase(Base):
+    """One row per AI assessment of a topic (Phase 6).
+
+    Stores the binary retail-relevance verdict and reason from Stage 2.
+    Full business-case fields (importance, investment band, etc.) land in Phase 7.
+    """
+
+    __tablename__ = "business_cases"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    topic_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("topics.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    relevance_verdict: Mapped[str] = mapped_column(Text, nullable=False)
+    relevance_reason: Mapped[str] = mapped_column(Text, nullable=False)
+    model_used: Mapped[str] = mapped_column(Text, nullable=False)
+    prompt_version: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_response: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    generated_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+    created_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+
+__all__ = ["Base", "BusinessCase", "CrawlConfig", "CrawlRun", "Topic", "TopicSource", "User"]

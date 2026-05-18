@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     auth_secret_key: str = "dev-secret-change-in-production"
     auth_session_ttl_hours: int = 24
 
+    # AI Assessment (Phase 6)
+    llm_provider: str = "anthropic"  # "anthropic" | "ollama"
+    llm_model: str = "claude-sonnet-4-20250514"
+    llm_api_key: str = ""  # required for anthropic; unused for ollama
+    llm_base_url: str = "http://localhost:11434"  # ollama base URL
+    assessment_prompt_version: str = "v1"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

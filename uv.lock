@@ -61,11 +61,13 @@ name = "api"
 version = "0.1.0"
 source = { editable = "services/api" }
 dependencies = [
+    { name = "assessor" },
     { name = "asyncpg" },
     { name = "bcrypt" },
     { name = "core" },
     { name = "crawler" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "sqlalchemy" },
     { name = "structlog" },
     { name = "uvicorn", extra = ["standard"] },
@@ -80,11 +82,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "assessor", editable = "services/assessor" },
     { name = "asyncpg", specifier = ">=0.29" },
     { name = "bcrypt", specifier = ">=4.0" },
     { name = "core", editable = "packages/core" },
     { name = "crawler", editable = "services/crawler" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
@@ -96,14 +100,22 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "assessor"
-version = "0.1.0"
+version = "0.6.0"
 source = { editable = "services/assessor" }
 dependencies = [
     { name = "core" },
+    { name = "httpx" },
+    { name = "structlog" },
+    { name = "typer" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "core", editable = "packages/core" }]
+requires-dist = [
+    { name = "core", editable = "packages/core" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "structlog", specifier = ">=24.1" },
+    { name = "typer", specifier = ">=0.12" },
+]
 
 [[package]]
 name = "asyncpg"
