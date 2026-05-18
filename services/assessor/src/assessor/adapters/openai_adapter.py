@@ -53,7 +53,7 @@ class OpenAIAdapter:
             "Content-Type": "application/json",
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=600.0) as client:
             resp = await client.post(
                 f"{self._base_url}/chat/completions",
                 headers=headers,
@@ -72,8 +72,15 @@ class OpenAIAdapter:
 
         # Try to parse as JSON if response_schema was requested
         if response_schema and content_text:
+            # Strip markdown code fences that local models often wrap around JSON
+            text_to_parse = content_text.strip()
+            if text_to_parse.startswith("```"):
+                # Remove opening fence (```json or ```)
+                text_to_parse = text_to_parse.split("\n", 1)[-1] if "\n" in text_to_parse else ""
+            if text_to_parse.endswith("```"):
+                text_to_parse = text_to_parse[:-3].rstrip()
             try:
-                result["parsed"] = json.loads(content_text)
+                result["parsed"] = json.loads(text_to_parse)
             except json.JSONDecodeError:
                 _log.warning("openai_compat.json_parse_failed", model=model)
 
