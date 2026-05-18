@@ -1,52 +1,40 @@
 # =============================================================================
-# Cloud Build Configuration - Trend Researcher (Production)
+# Cloud Build Configuration - Trend Researcher (Development)
 # =============================================================================
 #
 # Pipeline: Build -> Push -> Deploy
 # Target:   Google Cloud Run (europe-west2)
-# Trigger:  Push of version tag (v*) to main branch
+# Trigger:  Push to main branch (after PR merge)
 #
 # CI/CD Flow (GitHub Flow):
 #   1. CI: GitHub Actions on PR to main (build, lint, test)
-#   2. CD Dev: cloudbuild-dev.yaml on merge to main
-#   3. CD Prod: This file on version tag (v*)
+#   2. CD Dev: This file on merge to main
+#   3. CD Prod: cloudbuild.yaml on version tag (v*)
 #
-# Architecture (single-container, embedded Postgres + GCS-FUSE):
-#   - Ubuntu 24.04 runtime, postgresql-16 embedded, uvicorn API + Vue SPA served
-#     from one container. /app/data is the durable volume (Postgres data dir +
-#     dump rotation), mounted from GCS bucket via Cloud Run gen2 cloud-storage
-#     volumes.
-#   - PAT-secured POST /api/internal/crawl invoked by Cloud Scheduler at 12h
-#     cadence. No separate scheduler service (G11 — deleted Wave 6 T06).
+# Prerequisites:
+#   1. Enable required APIs:
+#      gcloud services enable cloudbuild.googleapis.com run.googleapis.com artifactregistry.googleapis.com
 #
-# Prerequisites (one-time, see .planning/phases/04-topic-api-ui-shell/CLOUD-RUN-DEPLOY.md):
-#   1. Enable APIs:
-#        gcloud services enable cloudbuild.googleapis.com run.googleapis.com \
-#          artifactregistry.googleapis.com secretmanager.googleapis.com \
-#          storage.googleapis.com cloudscheduler.googleapis.com
+#   2. Create Artifact Registry repository (shared with prod):
+#      gcloud artifacts repositories create trend-researcher-images \
+#        --repository-format=docker --location=europe-west2
 #
-#   2. Create Artifact Registry repository:
-#        gcloud artifacts repositories create trend-researcher-images \
-#          --repository-format=docker --location=europe-west2
+#   3. Create Cloud Storage bucket for development data:
+#      gcloud storage buckets create gs://trend-researcher-data-dev \
+#        --location=europe-west2 --uniform-bucket-level-access
 #
-#   3. Create Cloud Storage bucket for persistent data:
-#        gcloud storage buckets create gs://trend-researcher-data \
-#          --location=europe-west2 --uniform-bucket-level-access
+#   4. Create Cloud Build trigger for main branch:
+#      gcloud builds triggers create github \
+#        --repo-name=trend-researcher \
+#        --repo-owner=thbe \
+#        --branch-pattern=^main$ \
+#        --build-config=cloudbuild-dev.yaml \
+#        --name=trend-researcher-dev
 #
-#   4. Seed Secret Manager with the internal PAT:
-#        python3 -c 'import secrets; print(secrets.token_urlsafe(32))' \
-#          | gcloud secrets create trend-internal-pat --data-file=-
-#
-#   5. Grant Cloud Run runtime SA access to the bucket + secret:
-#        (see CLOUD-RUN-DEPLOY.md for full IAM grants)
-#
-#   6. Manual build submission (always use --region to avoid global fallback):
-#        gcloud builds submit --config=cloudbuild.yaml --region=europe-west2 \
-#          --substitutions=TAG_NAME=v0.5.2,COMMIT_SHA=$(git rev-parse --short HEAD)
-#
-#      Current release line: v0.6.0 (Phase 5 — crawl_config table + API +
-#      DB-driven crawler + config UI). Previous: v0.5.2 (login page),
-#      v0.5.1 (Google News description skip), v0.5.0 (description capture).
+#   5. Manual build submission (always use --region to avoid global fallback):
+#      gcloud builds submit --config=cloudbuild-dev.yaml \
+#        --region=europe-west2 \
+#        --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD)
 #
 # =============================================================================
 
@@ -54,10 +42,10 @@
 # Substitution Variables
 # -----------------------------------------------------------------------------
 substitutions:
-  _SERVICE_NAME: trend-researcher
+  _SERVICE_NAME: trend-researcher-dev
   _REGION: europe-west2
   _REPOSITORY: trend-researcher-images
-  _DATA_BUCKET: trend-researcher-data
+  _DATA_BUCKET: trend-researcher-data-dev
 
 # -----------------------------------------------------------------------------
 # Build Options
@@ -72,11 +60,6 @@ options:
 steps:
   # ---------------------------------------------------------------------------
   # Step 1: Build Docker Image
-  #   - Build context is repo root (Dockerfile copies packages/ + services/ + web/)
-  #   - Dockerfile lives at services/api/Dockerfile (3-stage: web -> py -> ubuntu+pg)
-  #   - --cache-from latest pulls the prior image layers when available
-  #   - DOCKER_BUILDKIT=1: Dockerfile uses RUN --mount=type=cache for uv,
-  #     which is a BuildKit-only feature. Legacy builder needs explicit opt-in.
   # ---------------------------------------------------------------------------
   - id: build
     name: gcr.io/cloud-builders/docker
@@ -86,7 +69,6 @@ steps:
       - build
       - --file=services/api/Dockerfile
       - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}:$COMMIT_SHA
-      - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}:$TAG_NAME
       - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}:latest
       - --cache-from=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}:latest
       - .
@@ -103,11 +85,6 @@ steps:
 
   # ---------------------------------------------------------------------------
   # Step 3: Deploy to Cloud Run
-  #   - gen2 execution environment is required for cloud-storage volumes
-  #   - --min-instances=0 + --max-instances=1: single-operator footprint, scale to zero
-  #   - --memory=2Gi --cpu=2 --timeout=600: room for embedded Postgres + crawl run
-  #   - --set-secrets binds TREND_INTERNAL_PAT to Secret Manager `trend-internal-pat:latest`
-  #   - --add-volume + --add-volume-mount: GCS bucket -> /app/data (PG data + dumps)
   # ---------------------------------------------------------------------------
   - id: deploy
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
@@ -126,7 +103,7 @@ steps:
       - --timeout=600
       - --min-instances=0
       - --max-instances=1
-      - --set-env-vars=BUILD_VERSION=$TAG_NAME,BUILD_COMMIT=$COMMIT_SHA,BUILD_TIME=$BUILD_ID,CRAWLER_TOP_N=100,LOG_FORMAT=json,AUTH_SEED_USERNAME=admin
+      - --set-env-vars=BUILD_VERSION=development,BUILD_COMMIT=$COMMIT_SHA,BUILD_TIME=$BUILD_ID,CRAWLER_TOP_N=100,LOG_FORMAT=json,AUTH_SEED_USERNAME=admin
       - --set-secrets=TREND_INTERNAL_PAT=trend-internal-pat:latest
       - --add-volume=name=data-volume,type=cloud-storage,bucket=${_DATA_BUCKET},readonly=false
       - --add-volume-mount=volume=data-volume,mount-path=/app/data
@@ -136,5 +113,4 @@ steps:
 # -----------------------------------------------------------------------------
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}:$COMMIT_SHA
-  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}:$TAG_NAME
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}:latest
