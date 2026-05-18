@@ -10,6 +10,10 @@
         <v-icon icon="mdi-database-outline" class="mr-2" />
         Trend Researcher
       </v-app-bar-title>
+      <template #append>
+        <v-btn to="/topics" variant="text">Topics</v-btn>
+        <v-btn to="/config" variant="text">Config</v-btn>
+      </template>
     </v-app-bar>
     <v-main>
       <v-container fluid class="pa-6">

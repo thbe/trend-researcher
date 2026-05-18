@@ -223,4 +223,31 @@ class User(Base):
     )
 
 
-__all__ = ["Base", "CrawlRun", "Topic", "TopicSource", "User"]
+class CrawlConfig(Base):
+    """Per-source crawl configuration (Phase 5).
+
+    Single source of truth for mutable crawl settings. The crawler reads this
+    table at the start of each run. The UI writes it. Cadence stays env-driven.
+    """
+
+    __tablename__ = "crawl_config"
+
+    source_name: Mapped[str] = mapped_column(Text, primary_key=True)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+    top_n: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("100")
+    )
+    capture_summary: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+    feed_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+
+__all__ = ["Base", "CrawlConfig", "CrawlRun", "Topic", "TopicSource", "User"]

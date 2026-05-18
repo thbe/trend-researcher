@@ -158,7 +158,29 @@ class TopicDetailResponse(BaseModel):
     """``topic_sources`` rows for this topic, ordered ``observed_at DESC`` (most recent first)."""
 
 
+class CrawlConfigResponse(BaseModel):
+    """One row from ``crawl_config``."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    source_name: str
+    enabled: bool
+    top_n: int
+    capture_summary: bool
+    feed_url: str | None
+    updated_at: datetime
+
+
+class CrawlConfigUpdateRequest(BaseModel):
+    """Mutable fields the operator can change via the UI."""
+
+    enabled: bool | None = None
+    top_n: int | None = Field(None, ge=1, le=500)
+
+
 __all__ = [
+    "CrawlConfigResponse",
+    "CrawlConfigUpdateRequest",
     "HealthzResponse",
     "RunResponse",
     "RunsListResponse",

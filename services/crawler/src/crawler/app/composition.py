@@ -14,7 +14,10 @@ import os
 import structlog
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from core import get_engine, get_sessionmaker, get_settings
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core import CrawlConfig, get_engine, get_sessionmaker, get_settings
 
 from crawler.adapters.persistence.sqlalchemy_crawl_run_repository import (
     SqlAlchemyCrawlRunRepository,
@@ -126,4 +129,62 @@ def build_repository() -> tuple[
     return topic_repo, crawl_run_repo, engine
 
 
-__all__ = ["build_sources", "build_repository"]
+async def build_sources_from_db(
+    session_factory,
+) -> list[SourcePort]:
+    """Build sources from the ``crawl_config`` table (Phase 5).
+
+    Each returned source carries a ``configured_top_n`` attribute so the
+    orchestrator can use per-source limits. Sources with ``enabled=False``
+    are excluded.
+
+    Falls back to :func:`build_sources` if the table is empty or on error
+    (graceful degradation for fresh installs before migration 0007 runs).
+    """
+    try:
+        async with session_factory() as session:
+            rows = (
+                await session.execute(
+                    select(CrawlConfig).where(CrawlConfig.enabled.is_(True))
+                )
+            ).scalars().all()
+    except Exception as exc:  # noqa: BLE001
+        _log.warning(
+            "crawl_config.read_failed_fallback_hardcoded",
+            error=str(exc),
+        )
+        return build_sources()
+
+    if not rows:
+        _log.info("crawl_config.empty_fallback_hardcoded")
+        return build_sources()
+
+    sources: list[SourcePort] = []
+    for cfg in rows:
+        if cfg.source_name == "hackernews":
+            src: SourcePort = HackerNewsSource()
+        elif cfg.feed_url:
+            src = RssSource(
+                name=cfg.source_name,
+                feed_url=cfg.feed_url,
+                capture_summary=cfg.capture_summary,
+            )
+        else:
+            _log.warning(
+                "crawl_config.skip_no_feed_url",
+                source_name=cfg.source_name,
+            )
+            continue
+        # Attach per-source top_n for orchestrator consumption.
+        src.configured_top_n = cfg.top_n  # type: ignore[attr-defined]
+        sources.append(src)
+
+    _log.info(
+        "crawl_config.sources_built",
+        count=len(sources),
+        names=[s.name for s in sources],
+    )
+    return sources
+
+
+__all__ = ["build_sources", "build_sources_from_db", "build_repository"]

@@ -33,6 +33,7 @@ from api.routes import internal as internal_routes
 from api.routes import runs as runs_routes
 from api.routes import topics as topics_routes
 from api.routes import auth as auth_routes
+from api.routes import crawl_config as crawl_config_routes
 
 
 @asynccontextmanager
@@ -65,6 +66,7 @@ app.include_router(healthz_routes.router, prefix="/api")
 app.include_router(auth_routes.router, prefix="/api")
 app.include_router(runs_routes.router, prefix="/api")
 app.include_router(topics_routes.router, prefix="/api")
+app.include_router(crawl_config_routes.router, prefix="/api")
 app.include_router(internal_routes.router, prefix="/api")
 
 # Auth middleware: protects all /api/* except /api/login and /api/healthz

@@ -80,7 +80,8 @@ async def run_once(
             "errors": 0,
         }
         try:
-            items = await source.fetch(top_n)
+            source_top_n = getattr(source, "configured_top_n", top_n)
+            items = await source.fetch(source_top_n)
         except Exception as exc:  # noqa: BLE001 — we want broad isolation per-source
             _log.error("source.fetch_failed", source=source.name, error=str(exc))
             src_stats["errors"] += 1

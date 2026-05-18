@@ -12,7 +12,7 @@ import os
 
 import typer
 
-from crawler.app.composition import build_repository, build_sources
+from crawler.app.composition import build_repository, build_sources_from_db
 from crawler.app.logging import configure_logging
 from crawler.app.orchestrator import run_once as run_once_async
 
@@ -51,9 +51,12 @@ def run_once_cmd(
         # Build inside the loop so the engine's pool binds to *this* loop,
         # then dispose inside it too — avoids "Event loop is closed" /
         # "attached to a different loop" tracebacks at shutdown.
-        sources = build_sources()
         topic_repo, crawl_run_repo, engine = build_repository()
         try:
+            from core import get_sessionmaker
+
+            session_factory = get_sessionmaker(engine)
+            sources = await build_sources_from_db(session_factory)
             return await run_once_async(
                 sources, topic_repo, crawl_run_repo, effective_top_n
             )
