@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # Auth: seed user credentials (upserted on app startup)
     auth_seed_username: str = "admin"
-    auth_seed_password: str = "changeme"
+    auth_seed_password: str = "0nly4%Testing"
 
     # Auth: session cookie signing key (random default for dev; override in prod)
     auth_secret_key: str = "dev-secret-change-in-production"
