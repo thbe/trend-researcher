@@ -32,7 +32,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from sqlalchemy import Column, MetaData, Table, select
+from sqlalchemy import Column, MetaData, Table, select, func, literal_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import get_session
@@ -91,7 +91,8 @@ def _parse_sort(sort: str) -> tuple[str, bool]:
 @router.get("/topics", response_model=TopicsListResponse)
 async def list_topics(
     sort: str = Query(_DEFAULT_SORT),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     session: AsyncSession = Depends(get_session),
 ) -> TopicsListResponse:
     """Return up to ``limit`` topics joined with derived stats, sorted per ``sort``."""
@@ -111,6 +112,15 @@ async def list_topics(
         .label("relevance_verdict")
     )
 
+    # Subquery: distinct source names as comma-separated string
+    source_names_sub = (
+        select(func.string_agg(func.distinct(TopicSource.source_name), literal_column("', '")))
+        .where(TopicSource.topic_id == Topic.id)
+        .correlate(Topic)
+        .scalar_subquery()
+        .label("source_names")
+    )
+
     stmt = (
         select(
             Topic.id,
@@ -122,6 +132,7 @@ async def list_topics(
             _v_topic_stats.c.breadth,
             _v_topic_stats.c.longevity_seconds,
             latest_verdict,
+            source_names_sub,
         )
         .select_from(
             Topic.__table__.outerjoin(  # type: ignore[attr-defined]
@@ -130,14 +141,21 @@ async def list_topics(
             )
         )
         .order_by(order_expr, Topic.id)
+        .offset(offset)
         .limit(limit)
     )
     result = await session.execute(stmt)
     rows = result.mappings().all()
 
+    # Total count for pagination
+    count_stmt = select(func.count(Topic.id))
+    total = (await session.execute(count_stmt)).scalar() or 0
+
     return TopicsListResponse(
         topics=[TopicResponse.model_validate(dict(row)) for row in rows],
+        total=total,
         limit=limit,
+        offset=offset,
         sort=sort,
     )
 

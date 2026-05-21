@@ -10,6 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from assessor.domain.prompts import (
+    DEFAULT_BUSINESS_CONTEXT,
     PROMPT_VERSION,
     RESPONSE_SCHEMA,
     RETAIL_RELEVANCE_PROMPT,
@@ -34,11 +35,13 @@ class AssessmentPipeline:
         rag: RAGPort,
         session_factory: async_sessionmaker[AsyncSession],
         model_id: str | None = None,
+        business_context: str | None = None,
     ) -> None:
         self._llm = llm
         self._rag = rag
         self._session_factory = session_factory
         self._model_id = model_id
+        self._business_context = business_context or DEFAULT_BUSINESS_CONTEXT
 
     async def assess_topic(self, topic_id: str) -> dict[str, Any] | None:
         """Assess a single topic and persist the result.
@@ -52,7 +55,9 @@ class AssessmentPipeline:
 
         # Build messages (prompt assembly lives here in domain, not in adapter)
         messages = [
-            {"role": "user", "content": RETAIL_RELEVANCE_SYSTEM},
+            {"role": "user", "content": RETAIL_RELEVANCE_SYSTEM.format(
+                business_context=self._business_context
+            )},
             {
                 "role": "user",
                 "content": RETAIL_RELEVANCE_PROMPT.format(
@@ -87,6 +92,7 @@ class AssessmentPipeline:
                 }
 
         verdict = parsed.get("verdict", "not-relevant")
+        category = parsed.get("category", "neutral")
         reason = parsed.get("reason", "No reason provided")
         model_used = response.get("model", self._model_id or "unknown")
 
@@ -120,16 +126,32 @@ class AssessmentPipeline:
         return {
             "topic_id": topic_id,
             "relevance_verdict": verdict,
+            "category": category,
             "relevance_reason": reason,
             "model_used": model_used,
             "prompt_version": PROMPT_VERSION,
         }
 
     async def assess_batch(self, topic_ids: list[str]) -> list[dict[str, Any]]:
-        """Assess multiple topics sequentially (no parallel LLM calls in v1)."""
+        """Assess multiple topics sequentially (no parallel LLM calls in v1).
+
+        Individual topic failures (timeouts, LLM errors) are logged and skipped
+        so the batch returns partial results rather than failing entirely.
+        """
         results = []
         for tid in topic_ids:
-            result = await self.assess_topic(tid)
-            if result:
-                results.append(result)
+            try:
+                result = await self.assess_topic(tid)
+                if result:
+                    results.append(result)
+            except Exception as exc:
+                _log.error("assessment.topic_failed", topic_id=tid, error=str(exc))
+                results.append({
+                    "topic_id": tid,
+                    "relevance_verdict": "error",
+                    "category": "neutral",
+                    "relevance_reason": f"Assessment failed: {exc}",
+                    "model_used": self._model_id or "unknown",
+                    "prompt_version": PROMPT_VERSION,
+                })
         return results

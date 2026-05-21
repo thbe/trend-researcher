@@ -9,7 +9,12 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/',
-    redirect: { name: 'topics' },
+    redirect: { name: 'dashboard' },
+  },
+  {
+    path: '/dashboard',
+    name: 'dashboard',
+    component: () => import('@/views/Dashboard.vue'),
   },
   {
     path: '/topics',
@@ -26,6 +31,11 @@ const routes: RouteRecordRaw[] = [
     path: '/config',
     name: 'crawl-config',
     component: () => import('@/views/CrawlConfig.vue'),
+  },
+  {
+    path: '/ai-config',
+    name: 'ai-config',
+    component: () => import('@/views/AIConfig.vue'),
   },
   {
     path: '/assessment',

@@ -14,6 +14,7 @@ export interface Topic {
   breadth: number
   longevity_seconds: number
   relevance_verdict: string | null
+  source_names: string | null
 }
 
 export interface TopicSource {
@@ -36,15 +37,18 @@ export interface TopicDetail extends Topic {
 
 export interface TopicsListResponse {
   topics: Topic[]
+  total: number
   limit: number
+  offset: number
   sort: string
 }
 
 export function listTopics(
   sort: string = '-last_seen_at',
   limit: number = 20,
+  offset: number = 0,
 ): Promise<TopicsListResponse> {
-  const params = new URLSearchParams({ sort, limit: String(limit) })
+  const params = new URLSearchParams({ sort, limit: String(limit), offset: String(offset) })
   return request<TopicsListResponse>(`/api/topics?${params.toString()}`)
 }
 

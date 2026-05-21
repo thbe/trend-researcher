@@ -31,7 +31,7 @@ Liveness + DB reachability probe.
 ```
 
 ```bash
-curl http://localhost:8000/api/healthz
+curl http://localhost:4000/api/healthz
 ```
 
 ---
@@ -61,7 +61,7 @@ Authenticate and receive a session cookie.
 ```
 
 ```bash
-curl -X POST http://localhost:8000/api/login \
+curl -X POST http://localhost:4000/api/login \
   -H "Content-Type: application/json" \
   -d '{"username":"alice","password":"secret"}'
 ```
@@ -84,7 +84,7 @@ Clear the session cookie.
 ```
 
 ```bash
-curl -X POST http://localhost:8000/api/logout
+curl -X POST http://localhost:4000/api/logout
 ```
 
 ---
@@ -110,7 +110,7 @@ Check if current session is valid (used by SPA auth guard).
 ```
 
 ```bash
-curl http://localhost:8000/api/me --cookie "tr_session=<token>"
+curl http://localhost:4000/api/me --cookie "tr_session=<token>"
 ```
 
 ---
@@ -152,7 +152,7 @@ Paginated list of topics with derived stats.
 ```
 
 ```bash
-curl "http://localhost:8000/api/topics?sort=-breadth&limit=10" \
+curl "http://localhost:4000/api/topics?sort=-breadth&limit=10" \
   --cookie "tr_session=<token>"
 ```
 
@@ -200,7 +200,7 @@ Full detail for one topic including sources and metadata.
 ```
 
 ```bash
-curl http://localhost:8000/api/topics/550e8400-e29b-41d4-a716-446655440000 \
+curl http://localhost:4000/api/topics/550e8400-e29b-41d4-a716-446655440000 \
   --cookie "tr_session=<token>"
 ```
 
@@ -245,7 +245,7 @@ Recent crawl runs, newest first.
 ```
 
 ```bash
-curl "http://localhost:8000/api/runs?limit=5" --cookie "tr_session=<token>"
+curl "http://localhost:4000/api/runs?limit=5" --cookie "tr_session=<token>"
 ```
 
 ---
@@ -275,7 +275,7 @@ List all crawl source configurations.
 ```
 
 ```bash
-curl http://localhost:8000/api/crawl-config --cookie "tr_session=<token>"
+curl http://localhost:4000/api/crawl-config --cookie "tr_session=<token>"
 ```
 
 ---
@@ -314,7 +314,7 @@ Update mutable fields for one crawl source.
 **Response (404):** `{ "detail": "Source '<name>' not found" }`
 
 ```bash
-curl -X PUT http://localhost:8000/api/crawl-config/hackernews \
+curl -X PUT http://localhost:4000/api/crawl-config/hackernews \
   -H "Content-Type: application/json" \
   -d '{"enabled": false}' \
   --cookie "tr_session=<token>"
@@ -347,6 +347,317 @@ Trigger a synchronous crawl run. Intended for Cloud Scheduler.
 ```
 
 ```bash
-curl -X POST http://localhost:8000/api/internal/crawl \
+curl -X POST http://localhost:4000/api/internal/crawl \
   -H "Authorization: Bearer <PAT_TOKEN>"
+```
+
+---
+
+### POST /api/crawl
+
+Trigger a crawl from the UI (session authenticated).
+
+| Property | Value |
+|----------|-------|
+| Auth | Yes (session cookie) |
+| Query params | None |
+| Request body | None |
+
+**Response (200):**
+```json
+{
+  "status": "ok",
+  "crawl_run_id": "uuid",
+  "totals": { "fetched": 500, "inserted": 42, "updated": 18, "skipped_within_run": 440, "errors": 0 }
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/crawl --cookie "tr_session=<token>"
+```
+
+---
+
+### POST /api/assess
+
+Start a background batch assessment job for unassessed topics.
+
+| Property | Value |
+|----------|-------|
+| Auth | Yes (session cookie) |
+| Request body | None |
+
+**Query parameters:**
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `limit` | int | `20` | Max topics to assess in this batch. |
+
+**Response (200):**
+```json
+{ "job_id": "uuid", "state": "pending", "total_topics": 20 }
+```
+
+```bash
+curl -X POST "http://localhost:4000/api/assess?limit=10" --cookie "tr_session=<token>"
+```
+
+---
+
+### POST /api/assess/{topic_id}
+
+Assess a single topic synchronously (blocks until LLM responds).
+
+| Property | Value |
+|----------|-------|
+| Auth | Yes (session cookie) |
+| Path params | `topic_id` (UUID) |
+| Request body | None |
+
+**Response (200):**
+```json
+{
+  "topic_id": "uuid",
+  "relevance_verdict": "relevant",
+  "category": "opportunity",
+  "relevance_reason": "string",
+  "model_used": "qwen3:4b",
+  "prompt_version": "v1"
+}
+```
+
+**Response (404):** `{ "detail": "Topic not found" }`
+**Response (502):** `{ "detail": "LLM provider error: ..." }`
+
+```bash
+curl -X POST http://localhost:4000/api/assess/550e8400-e29b-41d4-a716-446655440000 \
+  --cookie "tr_session=<token>"
+```
+
+---
+
+### GET /api/assess/jobs
+
+List recent assessment jobs, newest first.
+
+| Property | Value |
+|----------|-------|
+| Auth | Yes (session cookie) |
+| Request body | None |
+
+**Query parameters:**
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `limit` | int | `10` | Max jobs to return. |
+
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "state": "completed",
+    "total_topics": 20,
+    "completed_topics": 20,
+    "failed_topics": 1,
+    "error": null,
+    "created_at": "datetime",
+    "started_at": "datetime",
+    "finished_at": "datetime"
+  }
+]
+```
+
+```bash
+curl http://localhost:4000/api/assess/jobs --cookie "tr_session=<token>"
+```
+
+---
+
+### GET /api/assess/jobs/{job_id}
+
+Get status and progress of a specific assessment job. Use for polling.
+
+| Property | Value |
+|----------|-------|
+| Auth | Yes (session cookie) |
+| Path params | `job_id` (UUID) |
+| Request body | None |
+
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "state": "running",
+  "total_topics": 20,
+  "completed_topics": 7,
+  "failed_topics": 0,
+  "results": null,
+  "error": null,
+  "created_at": "datetime",
+  "started_at": "datetime",
+  "finished_at": null
+}
+```
+
+When `state` is `"completed"`, `results` contains:
+```json
+{ "assessed": 20, "relevant": 8, "details": [...] }
+```
+
+**Response (404):** `{ "detail": "Job not found" }`
+
+```bash
+curl http://localhost:4000/api/assess/jobs/550e8400-e29b-41d4-a716-446655440000 \
+  --cookie "tr_session=<token>"
+```
+
+---
+
+### GET /api/business-cases
+
+List all AI assessment results with topic titles.
+
+| Property | Value |
+|----------|-------|
+| Auth | Yes (session cookie) |
+| Request body | None |
+
+**Query parameters:**
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `limit` | int | `50` | Max results to return. |
+| `offset` | int | `0` | Pagination offset. |
+| `category` | string | (none) | Filter by category: `opportunity`, `risk`, `neutral`. |
+
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "topic_id": "uuid",
+    "title": "Topic headline",
+    "relevance_verdict": "relevant",
+    "relevance_reason": "string",
+    "model_used": "qwen3:4b",
+    "prompt_version": "v1",
+    "generated_at": "datetime"
+  }
+]
+```
+
+```bash
+curl "http://localhost:4000/api/business-cases?category=opportunity" \
+  --cookie "tr_session=<token>"
+```
+
+---
+
+### GET /api/ai-config
+
+Get current AI/LLM configuration.
+
+| Property | Value |
+|----------|-------|
+| Auth | Yes (session cookie) |
+| Query params | None |
+| Request body | None |
+
+**Response (200):**
+```json
+{
+  "base_url": "http://ollama:11434",
+  "model": "qwen3:4b",
+  "api_token": null,
+  "business_context": "Large European retail chain...",
+  "thinking_effort": "low",
+  "updated_at": "datetime"
+}
+```
+
+```bash
+curl http://localhost:4000/api/ai-config --cookie "tr_session=<token>"
+```
+
+---
+
+### PUT /api/ai-config
+
+Update AI/LLM configuration.
+
+| Property | Value |
+|----------|-------|
+| Auth | Yes (session cookie) |
+| Query params | None |
+
+**Request body** (all fields optional):
+```json
+{
+  "base_url": "http://ollama:11434",
+  "model": "qwen3.5:latest",
+  "api_token": null,
+  "business_context": "string",
+  "thinking_effort": "medium"
+}
+```
+
+- `thinking_effort` values: `off`, `low`, `medium`, `high`
+
+**Response (200):** Same shape as GET response.
+
+```bash
+curl -X PUT http://localhost:4000/api/ai-config \
+  -H "Content-Type: application/json" \
+  -d '{"model": "qwen3.5:latest", "thinking_effort": "medium"}' \
+  --cookie "tr_session=<token>"
+```
+
+---
+
+### GET /api/ai-config/models
+
+List available models from the configured Ollama instance.
+
+| Property | Value |
+|----------|-------|
+| Auth | Yes (session cookie) |
+| Query params | None |
+| Request body | None |
+
+**Response (200):**
+```json
+[
+  { "name": "qwen3:4b", "size": 2500000000, "modified_at": "datetime" }
+]
+```
+
+```bash
+curl http://localhost:4000/api/ai-config/models --cookie "tr_session=<token>"
+```
+
+---
+
+### GET /api/dashboard
+
+Dashboard summary statistics.
+
+| Property | Value |
+|----------|-------|
+| Auth | Yes (session cookie) |
+| Query params | None |
+| Request body | None |
+
+**Response (200):**
+```json
+{
+  "total_topics": 142,
+  "assessed_topics": 80,
+  "opportunities": 15,
+  "risks": 8
+}
+```
+
+```bash
+curl http://localhost:4000/api/dashboard --cookie "tr_session=<token>"
 ```

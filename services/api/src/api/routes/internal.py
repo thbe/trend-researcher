@@ -37,14 +37,15 @@ async def _run_crawl_isolated() -> dict[str, Any]:
 
     # Imported lazily so importing the route module never pulls the entire
     # crawler dep graph during pytest collection.
-    from crawler.app.composition import build_repository, build_sources
+    from crawler.app.composition import build_repository, build_sources_from_db
     from crawler.app.orchestrator import run_once
 
     top_n = int(os.getenv("CRAWLER_TOP_N", "100"))
     engine = None
     try:
-        sources = build_sources()
         topic_repo, crawl_run_repo, engine = build_repository()
+        session_factory = topic_repo._session_factory  # noqa: SLF001
+        sources = await build_sources_from_db(session_factory)
         stats = await run_once(sources, topic_repo, crawl_run_repo, top_n)
         _log.info(
             "internal.crawl.complete",
@@ -63,12 +64,30 @@ async def _run_crawl_isolated() -> dict[str, Any]:
     dependencies=[Depends(require_pat)],
 )
 async def trigger_crawl() -> dict[str, Any]:
-    """Run a crawl synchronously and return the stats."""
+    """Run a crawl synchronously and return the stats (PAT-protected for schedulers)."""
 
     try:
         stats = await _run_crawl_isolated()
     except Exception as exc:  # noqa: BLE001
         _log.exception("internal.crawl.failed", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"crawl failed: {exc}",
+        ) from exc
+    return {"status": "ok", **stats}
+
+
+@router.post(
+    "/crawl",
+    status_code=status.HTTP_200_OK,
+)
+async def trigger_crawl_ui() -> dict[str, Any]:
+    """Run a crawl from the UI (session-cookie auth handled by middleware)."""
+
+    try:
+        stats = await _run_crawl_isolated()
+    except Exception as exc:  # noqa: BLE001
+        _log.exception("crawl.failed", error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"crawl failed: {exc}",

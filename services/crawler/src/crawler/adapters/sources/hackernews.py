@@ -36,10 +36,13 @@ class HackerNewsSource:
         self,
         http_client: httpx.AsyncClient | None = None,
         base_url: str = _DEFAULT_BASE_URL,
+        *,
+        verify_ssl: bool = True,
     ) -> None:
         self._client = http_client
         self._owns_client = http_client is None
         self._base_url = base_url.rstrip("/")
+        self._verify_ssl = verify_ssl
 
     async def fetch(self, top_n: int) -> list[RawItem]:
         """Fetch up to top_n front-page items in HN-native rank order."""
@@ -58,7 +61,7 @@ class HackerNewsSource:
     def _acquire_client(self) -> tuple[httpx.AsyncClient, bool]:
         if self._client is not None:
             return self._client, False
-        return httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT), True
+        return httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT, verify=self._verify_ssl), True
 
     async def _fetch_topstory_ids(self, client: httpx.AsyncClient) -> list[int]:
         resp = await client.get(f"{self._base_url}/topstories.json")

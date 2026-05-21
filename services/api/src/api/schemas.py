@@ -87,6 +87,8 @@ class TopicResponse(BaseModel):
     """``v_topic_stats.longevity_seconds`` = EXTRACT(EPOCH FROM (last_seen_at - first_seen_at))::bigint."""
     relevance_verdict: str | None = None
     """Latest business_cases.relevance_verdict for this topic (NULL if unassessed)."""
+    source_names: str | None = None
+    """Comma-separated distinct source names that observed this topic."""
 
 
 class TopicsListResponse(BaseModel):
@@ -98,7 +100,9 @@ class TopicsListResponse(BaseModel):
     """
 
     topics: list[TopicResponse]
+    total: int
     limit: int
+    offset: int
     sort: str
 
 
@@ -169,6 +173,7 @@ class CrawlConfigResponse(BaseModel):
     enabled: bool
     top_n: int
     capture_summary: bool
+    verify_ssl: bool
     feed_url: str | None
     updated_at: datetime
 
@@ -178,10 +183,50 @@ class CrawlConfigUpdateRequest(BaseModel):
 
     enabled: bool | None = None
     top_n: int | None = Field(None, ge=1, le=500)
+    capture_summary: bool | None = None
+    verify_ssl: bool | None = None
+    feed_url: str | None = None
+
+
+class CrawlConfigCreateRequest(BaseModel):
+    """Create a new crawl source."""
+
+    source_name: str = Field(..., min_length=1, max_length=100)
+    enabled: bool = True
+    top_n: int = Field(100, ge=1, le=500)
+    capture_summary: bool = True
+    verify_ssl: bool = True
+    feed_url: str | None = None
+
+
+class AIConfigResponse(BaseModel):
+    """AI/LLM connection settings."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    base_url: str
+    model: str
+    api_token: str | None
+    business_context: str | None
+    thinking_effort: str
+    updated_at: datetime
+
+
+class AIConfigUpdateRequest(BaseModel):
+    """Update AI config fields."""
+
+    base_url: str | None = None
+    model: str | None = None
+    api_token: str | None = None
+    business_context: str | None = None
+    thinking_effort: str | None = None
 
 
 __all__ = [
     "CrawlConfigResponse",
+    "AIConfigResponse",
+    "AIConfigUpdateRequest",
+    "CrawlConfigCreateRequest",
     "CrawlConfigUpdateRequest",
     "HealthzResponse",
     "RunResponse",

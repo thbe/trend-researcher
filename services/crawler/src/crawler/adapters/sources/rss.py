@@ -49,16 +49,13 @@ class RssSource:
         *,
         http_client: httpx.AsyncClient | None = None,
         capture_summary: bool = True,
+        verify_ssl: bool = True,
     ) -> None:
         self.name = name
         self._feed_url = feed_url
         self._http_client = http_client
-        # Plan 04.5.1: when False, force ``RawItem.description=None`` regardless of
-        # feed content. Used to drop Google News' related-articles ``<ol><li><a>``
-        # HTML fragments which masquerade as descriptions but are link lists, not
-        # publisher prose. The raw value still lands in ``raw_payload['summary']``
-        # so we keep full forensic fidelity.
         self._capture_summary = capture_summary
+        self._verify_ssl = verify_ssl
 
     async def fetch(self, top_n: int) -> list[RawItem]:
         """Return up to ``top_n`` items from the feed, in feed order."""
@@ -85,7 +82,7 @@ class RssSource:
         """Return (client, owns). If we own it, caller must aclose() it."""
         if self._http_client is not None:
             return self._http_client, False
-        return httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT), True
+        return httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT, verify=self._verify_ssl), True
 
     def _build_items(
         self,

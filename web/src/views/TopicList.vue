@@ -37,6 +37,7 @@ const SORT_KEY_MAP: Record<string, string> = {
 const headers = [
   { title: 'Title', key: 'title', sortable: false },
   { title: 'Description', key: 'description', sortable: false },
+  { title: 'Source', key: 'source_names', sortable: false, width: '140px' },
   { title: 'Verdict', key: 'relevance_verdict', sortable: false, width: '120px' },
   { title: 'Sources', key: 'breadth', align: 'end' as const, sortable: true },
   {
@@ -88,9 +89,10 @@ async function load(options: DataTableOptions) {
   error.value = null
   try {
     const sort = apiSortString(options.sortBy)
-    const resp = await listTopics(sort, options.itemsPerPage)
+    const offset = (options.page - 1) * options.itemsPerPage
+    const resp = await listTopics(sort, options.itemsPerPage, offset)
     items.value = resp.topics
-    totalItems.value = resp.topics.length
+    totalItems.value = resp.total
     echoedSort.value = resp.sort
   } catch (err) {
     if (err instanceof ApiError) {
@@ -123,10 +125,10 @@ async function triggerCrawl() {
   crawling.value = true
   actionMessage.value = null
   try {
-    const resp = await fetch('/api/internal/crawl', { method: 'POST' })
+    const resp = await fetch('/api/crawl', { method: 'POST' })
     if (!resp.ok) throw new Error(`Crawl failed: ${resp.status}`)
     const data = await resp.json()
-    actionMessage.value = `Crawl complete — ${data.new_topics ?? 0} new, ${data.updated_topics ?? 0} updated`
+    actionMessage.value = `Crawl complete — ${data.totals?.inserted ?? 0} new, ${data.totals?.updated ?? 0} updated`
     // Reload topics
     void load({ page: 1, itemsPerPage: itemsPerPage.value, sortBy: sortBy.value })
   } catch (e) {
@@ -141,7 +143,7 @@ async function triggerAssess() {
   actionMessage.value = null
   try {
     const data = await assessBatch()
-    actionMessage.value = `Assessed ${data.assessed} topics — ${data.relevant} relevant`
+    actionMessage.value = `Assessment job started (${data.total_topics} topics queued)`
     // Reload topics to show updated verdicts
     void load({ page: 1, itemsPerPage: itemsPerPage.value, sortBy: sortBy.value })
   } catch (e) {
@@ -233,6 +235,12 @@ onMounted(() => {
           truncate(item.description)
         }}</span>
         <em v-else class="text-disabled">—</em>
+      </template>
+      <template #item.source_names="{ item }">
+        <template v-if="item.source_names">
+          <v-chip v-for="s in item.source_names.split(', ')" :key="s" size="x-small" variant="tonal" class="ma-1">{{ s }}</v-chip>
+        </template>
+        <span v-else class="text-disabled">—</span>
       </template>
       <template #item.relevance_verdict="{ item }">
         <v-chip
