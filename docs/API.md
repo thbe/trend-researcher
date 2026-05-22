@@ -571,10 +571,18 @@ Get current AI/LLM configuration.
   "model": "qwen3:4b",
   "api_token": null,
   "business_context": "Large European retail chain...",
+  "opportunity_criteria": "string|null",
+  "risk_criteria": "string|null",
   "thinking_effort": "low",
+  "request_timeout_seconds": 120,
   "updated_at": "datetime"
 }
 ```
+
+The active LLM adapter is auto-selected from `base_url`:
+- contains `anthropic` → Anthropic adapter
+- contains `openai` or `api_token` is set → OpenAI-compatible adapter
+- otherwise → Ollama adapter
 
 ```bash
 curl http://localhost:4000/api/ai-config --cookie "tr_session=<token>"
@@ -598,11 +606,15 @@ Update AI/LLM configuration.
   "model": "qwen3.5:latest",
   "api_token": null,
   "business_context": "string",
-  "thinking_effort": "medium"
+  "opportunity_criteria": "string",
+  "risk_criteria": "string",
+  "thinking_effort": "medium",
+  "request_timeout_seconds": 180
 }
 ```
 
 - `thinking_effort` values: `off`, `low`, `medium`, `high`
+- `request_timeout_seconds`: integer, `10 <= n <= 3600`. Applies to the Ollama adapter only; OpenAI/Anthropic adapters use the provider SDK's own timeout.
 
 **Response (200):** Same shape as GET response.
 

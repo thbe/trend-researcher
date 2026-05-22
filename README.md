@@ -11,9 +11,10 @@ A two-stage internal tool that continuously crawls major news, social, and tech 
 │  (NYT, Google News, Hacker News). Fuzzy dedup via           │
 │  rapidfuzz. Store in PostgreSQL.                            │
 ├─────────────────────────────────────────────────────────────┤
-│  Stage 2 — Assessment (AI, not yet implemented)             │
-│  RAG layer filters topics for retail-market relevance,      │
-│  generates business cases with importance scores.           │
+│  Stage 2 — Assessment (AI)                                  │
+│  Postgres-backed RAG + pluggable LLM adapter (Ollama /      │
+│  OpenAI / Anthropic) judges retail relevance and drafts     │
+│  a business case with importance score + investment band.   │
 ├─────────────────────────────────────────────────────────────┤
 │  Frontend — Vue 3 + Vuetify SPA                             │
 │  View trends, configure crawl runs, read assessments.       │
@@ -21,6 +22,8 @@ A two-stage internal tool that continuously crawls major news, social, and tech 
 ```
 
 **Deployment model:** Single container on Cloud Run with embedded PostgreSQL 16. Data persists via GCS-FUSE mounted volume with dump/restore lifecycle.
+
+> For an in-depth, component-level view see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). For the full REST contract see [`docs/API.md`](docs/API.md). For ops/runbook see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ## Tech Stack
 
@@ -40,17 +43,20 @@ A two-stage internal tool that continuously crawls major news, social, and tech 
 trend-researcher/
 ├── packages/
 │   └── core/              # Shared models, settings, Alembic migrations
-│       ├── src/core/      # ORM models (Topic, CrawlRun, CrawlConfig, User)
-│       └── alembic/       # 7 migration versions
+│       ├── src/core/      # ORM models (Topic, TopicSource, CrawlRun,
+│       │                  #  CrawlConfig, User, AIConfig, BusinessCase,
+│       │                  #  AssessmentJob)
+│       └── alembic/       # 15 migration versions
 ├── services/
 │   ├── api/               # FastAPI app + docker-entrypoint.sh + Dockerfile
 │   │   └── src/api/       # Routes, auth middleware, dump-debouncer
-│   ├── crawler/           # Typer CLI one-shot crawler
+│   ├── crawler/           # Typer CLI one-shot crawler (hex: adapters/ports/domain)
 │   │   └── src/crawler/   # Sources, orchestrator, fuzzy dedup
-│   └── assessor/          # Stage 2 AI assessment (placeholder)
+│   └── assessor/          # Stage 2 AI assessment (hex: adapters/ports/domain)
+│       └── src/assessor/  # LLM adapters (Ollama/OpenAI/Anthropic), RAG, pipeline
 ├── web/                   # Vue 3 + Vuetify SPA
 ├── scripts/               # Utility scripts
-├── docker-compose.yml     # Local dev: postgres + crawler + api
+├── docker-compose.yml     # Local dev: postgres + crawler + api + ollama
 ├── cloudbuild.yaml        # CI/CD pipeline
 └── pyproject.toml         # uv workspace root
 ```
@@ -111,7 +117,7 @@ npm run dev
 docker compose up
 ```
 
-This starts PostgreSQL, the API (port 8000 with SPA), and runs a one-shot crawl.
+This starts PostgreSQL, the API (port 4000 -> 8000 with the SPA), an Ollama container for local LLM inference, and runs a one-shot crawl.
 
 ## API Endpoints
 
@@ -124,10 +130,21 @@ All routes are prefixed with `/api`.
 | POST | `/api/logout` | Clear session cookie |
 | GET | `/api/me` | Current authenticated user |
 | GET | `/api/topics` | Paginated topic list with stats |
+| GET | `/api/topics/{id}` | Topic detail (sources, business case) |
 | GET | `/api/runs` | Last N crawl runs (newest first) |
+| POST | `/api/crawl` | Trigger an ad-hoc crawl run |
 | GET | `/api/crawl-config` | Current crawl source configuration |
 | PUT | `/api/crawl-config` | Update crawl source configuration |
-| POST | `/api/internal/crawl` | Trigger a crawl run (internal/scheduler) |
+| GET | `/api/ai-config` | Get AI/LLM configuration |
+| PUT | `/api/ai-config` | Update AI/LLM configuration |
+| GET | `/api/ai-config/models` | List models available at configured endpoint |
+| POST | `/api/assess` | Trigger assessment job over unassessed topics |
+| POST | `/api/assess/{topic_id}` | (Re-)assess a single topic |
+| GET | `/api/assess/jobs` | List assessment jobs |
+| GET | `/api/assess/jobs/{id}` | Assessment job detail/progress |
+| GET | `/api/business-cases` | List generated business cases |
+| GET | `/api/dashboard` | Dashboard summary statistics |
+| POST | `/api/internal/crawl` | Trigger a crawl run (scheduler, PAT-auth) |
 
 **Auth:** All `/api/*` routes except `/api/login` and `/api/healthz` require an authenticated session cookie.
 
@@ -154,6 +171,18 @@ All routes are prefixed with `/api`.
 ### Crawl Configuration
 
 The crawler reads source configuration from the `crawl_config` database table. If no config exists, it falls back to hardcoded defaults (NYT, Google News, Hacker News RSS feeds).
+
+### AI Configuration
+
+Stage 2 assessment is configured at runtime via the `ai_config` table (single row, edited from the UI or `PUT /api/ai-config`):
+
+- `base_url`, `model`, `api_token` — endpoint selection. The adapter is auto-routed by `base_url`: `anthropic.com` → Anthropic adapter, `openai.com` (or any `api_token` set) → OpenAI-compatible adapter, otherwise → Ollama.
+- `business_context` — free-form description of the target market, injected into every prompt.
+- `opportunity_criteria` / `risk_criteria` — domain rubric used by the LLM to classify topics.
+- `thinking_effort` — `off` / `low` / `medium` / `high` (passed through to providers that support reasoning budgets).
+- `request_timeout_seconds` — per-request HTTP timeout for the Ollama adapter (10–3600s, default 120). OpenAI/Anthropic adapters use the provider SDK's own timeout settings.
+
+In production `base_url` must point at a hosted LLM endpoint — the Cloud Run image does **not** include Ollama.
 
 ## Deployment
 
