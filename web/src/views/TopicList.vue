@@ -249,9 +249,9 @@ onMounted(() => {
       :items="items"
       :items-length="totalItems"
       :loading="loading"
-      :items-per-page="itemsPerPage"
-      :page="page"
-      :sort-by="sortBy"
+      v-model:items-per-page="itemsPerPage"
+      v-model:page="page"
+      v-model:sort-by="sortBy"
       :items-per-page-options="[10, 20, 50, 100]"
       hover
       density="comfortable"
