@@ -2,7 +2,7 @@
 // Field shapes mirror services/api/src/api/schemas.py
 // (TopicResponse, TopicsListResponse, TopicSourceResponse,
 // TopicDetailResponse).
-import { request } from './client'
+import { ApiError, request } from './client'
 
 export interface Topic {
   id: string
@@ -54,4 +54,37 @@ export function listTopics(
 
 export function getTopic(id: string): Promise<TopicDetail> {
   return request<TopicDetail>(`/api/topics/${encodeURIComponent(id)}`)
+}
+
+export interface TopicCleanupRequest {
+  source_name?: string | null
+  older_than_days?: number | null
+}
+
+export interface TopicCleanupResponse {
+  topic_sources_deleted: number
+  topics_deleted: number
+  source_name: string | null
+  older_than_days: number | null
+}
+
+export async function cleanupTopics(
+  body: TopicCleanupRequest,
+): Promise<TopicCleanupResponse> {
+  const res = await fetch('/api/topics/cleanup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`
+    try {
+      const j = await res.json()
+      if (j && typeof j.detail === 'string') detail = j.detail
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(res.status, detail)
+  }
+  return (await res.json()) as TopicCleanupResponse
 }

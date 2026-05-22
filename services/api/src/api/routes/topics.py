@@ -29,14 +29,17 @@ Mounted at ``/api/topics`` (prefix applied in ``main.py``, per G2).
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from sqlalchemy import Column, MetaData, Table, select, func, literal_column
+from sqlalchemy import Column, MetaData, Table, delete, select, func, literal_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import get_session
 from api.schemas import (
+    TopicCleanupRequest,
+    TopicCleanupResponse,
     TopicDetailResponse,
     TopicResponse,
     TopicSourceResponse,
@@ -221,6 +224,79 @@ async def get_topic(
     payload["sources"] = [TopicSourceResponse.model_validate(s) for s in source_rows]
 
     return TopicDetailResponse.model_validate(payload)
+
+
+@router.post("/topics/cleanup", response_model=TopicCleanupResponse)
+async def cleanup_topics(
+    body: TopicCleanupRequest,
+    session: AsyncSession = Depends(get_session),
+) -> TopicCleanupResponse:
+    """Manually purge topics / topic observations.
+
+    Filters (AND-combined):
+    - ``source_name``: restrict to observations from this source only.
+    - ``older_than_days``: restrict to items older than N days
+      (``observed_at`` for sources, ``last_seen_at`` for topics).
+
+    At least one filter is required (empty body → 400) so an accidental
+    call cannot wipe the entire store.
+
+    Behaviour:
+    - If ``source_name`` is given, delete matching ``topic_sources`` rows
+      first, then sweep any ``topics`` left with zero remaining sources.
+    - If ``source_name`` is omitted, delete ``topics`` whose
+      ``last_seen_at`` is older than the cutoff (cascade removes their
+      ``topic_sources``).
+    """
+
+    if body.source_name is None and body.older_than_days is None:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one of source_name or older_than_days is required.",
+        )
+
+    cutoff: datetime | None = None
+    if body.older_than_days is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=body.older_than_days)
+
+    sources_deleted = 0
+    topics_deleted = 0
+
+    if body.source_name is not None:
+        # Step 1: delete matching topic_sources rows.
+        src_stmt = delete(TopicSource).where(TopicSource.source_name == body.source_name)
+        if cutoff is not None:
+            src_stmt = src_stmt.where(TopicSource.observed_at < cutoff)
+        src_result = await session.execute(src_stmt)
+        sources_deleted = int(src_result.rowcount or 0)  # type: ignore[attr-defined]
+
+        # Step 2: delete orphan topics (no remaining sources at all).
+        orphan_subq = (
+            select(Topic.id)
+            .outerjoin(TopicSource, TopicSource.topic_id == Topic.id)
+            .group_by(Topic.id)
+            .having(func.count(TopicSource.id) == 0)
+        )
+        topic_stmt = delete(Topic).where(Topic.id.in_(orphan_subq))
+        topic_result = await session.execute(topic_stmt)
+        topics_deleted = int(topic_result.rowcount or 0)  # type: ignore[attr-defined]
+    else:
+        # No source filter → age-only purge across all topics.
+        assert cutoff is not None  # guaranteed by the 400 guard above
+        topic_stmt = delete(Topic).where(Topic.last_seen_at < cutoff)
+        topic_result = await session.execute(topic_stmt)
+        topics_deleted = int(topic_result.rowcount or 0)  # type: ignore[attr-defined]
+        # topic_sources rows are removed via ON DELETE CASCADE on the FK; we
+        # don't report a separate count here (the cascade is opaque to us).
+
+    await session.commit()
+
+    return TopicCleanupResponse(
+        topic_sources_deleted=sources_deleted,
+        topics_deleted=topics_deleted,
+        source_name=body.source_name,
+        older_than_days=body.older_than_days,
+    )
 
 
 __all__ = ["router"]

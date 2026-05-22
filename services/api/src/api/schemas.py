@@ -199,6 +199,33 @@ class CrawlConfigCreateRequest(BaseModel):
     feed_url: str | None = None
 
 
+class TopicCleanupRequest(BaseModel):
+    """Manual topic cleanup request.
+
+    Filters are AND-combined. At least one of ``source_name`` or
+    ``older_than_days`` must be provided (server rejects empty bodies to
+    prevent accidental "delete everything" calls).
+
+    - ``source_name``: only purge observations from this source. If omitted,
+      filter spans all sources.
+    - ``older_than_days``: only purge items whose ``last_seen_at`` (topics) /
+      ``observed_at`` (topic_sources) is older than this many days. If omitted,
+      no age filter (when source_name is set, deletes ALL from that source).
+    """
+
+    source_name: str | None = Field(None, min_length=1, max_length=100)
+    older_than_days: int | None = Field(None, ge=0, le=3650)
+
+
+class TopicCleanupResponse(BaseModel):
+    """Counts of rows removed by the cleanup operation."""
+
+    topic_sources_deleted: int
+    topics_deleted: int
+    source_name: str | None
+    older_than_days: int | None
+
+
 class AIConfigResponse(BaseModel):
     """AI/LLM connection settings."""
 
@@ -235,4 +262,6 @@ __all__ = [
     "TopicsListResponse",
     "TopicSourceResponse",
     "TopicDetailResponse",
+    "TopicCleanupRequest",
+    "TopicCleanupResponse",
 ]

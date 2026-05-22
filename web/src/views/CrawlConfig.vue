@@ -8,6 +8,7 @@ import {
   type CrawlConfig,
   type CrawlConfigCreate,
 } from '@/api/crawlConfig'
+import { cleanupTopics, type TopicCleanupResponse } from '@/api/topics'
 
 const configs = ref<CrawlConfig[]>([])
 const loading = ref(false)
@@ -36,6 +37,17 @@ const editDialog = ref(false)
 const editSource = ref<CrawlConfig | null>(null)
 const editForm = ref({ top_n: 100, feed_url: '' as string | null, capture_summary: true, verify_ssl: true, enabled: true })
 const editLoading = ref(false)
+
+// Cleanup dialog state
+const cleanupDialog = ref(false)
+const cleanupForm = ref<{ source_name: string | null; older_than_days: number | null; mode: 'age' | 'all' }>({
+  source_name: null,
+  older_than_days: 30,
+  mode: 'age',
+})
+const cleanupLoading = ref(false)
+const cleanupResult = ref<TopicCleanupResponse | null>(null)
+const cleanupError = ref<string | null>(null)
 
 async function load() {
   loading.value = true
@@ -172,6 +184,35 @@ async function saveEdit() {
 }
 
 onMounted(load)
+
+function openCleanupDialog(sourceName: string | null) {
+  cleanupForm.value = {
+    source_name: sourceName,
+    older_than_days: 30,
+    mode: 'age',
+  }
+  cleanupResult.value = null
+  cleanupError.value = null
+  cleanupDialog.value = true
+}
+
+async function doCleanup() {
+  cleanupLoading.value = true
+  cleanupError.value = null
+  cleanupResult.value = null
+  try {
+    const olderThanDays =
+      cleanupForm.value.mode === 'all' ? null : cleanupForm.value.older_than_days
+    cleanupResult.value = await cleanupTopics({
+      source_name: cleanupForm.value.source_name,
+      older_than_days: olderThanDays,
+    })
+  } catch (e: any) {
+    cleanupError.value = e.message || 'Cleanup failed'
+  } finally {
+    cleanupLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -181,6 +222,15 @@ onMounted(load)
         <div class="d-flex align-center mb-4">
           <h1 class="text-h4">Sources</h1>
           <v-spacer />
+          <v-btn
+            color="warning"
+            variant="tonal"
+            prepend-icon="mdi-broom"
+            class="mr-2"
+            @click="openCleanupDialog(null)"
+          >
+            Cleanup
+          </v-btn>
           <v-btn color="primary" prepend-icon="mdi-plus" @click="openAddDialog">
             Add Source
           </v-btn>
@@ -268,6 +318,14 @@ onMounted(load)
                 variant="text"
                 color="primary"
                 @click="openEditDialog(item)"
+              />
+              <v-btn
+                icon="mdi-broom"
+                size="small"
+                variant="text"
+                color="warning"
+                title="Cleanup topics from this source"
+                @click="openCleanupDialog(item.source_name)"
               />
               <v-btn
                 icon="mdi-delete"
@@ -406,6 +464,95 @@ onMounted(load)
           <v-spacer />
           <v-btn @click="editDialog = false">Cancel</v-btn>
           <v-btn color="primary" :loading="editLoading" @click="saveEdit">Save</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+    <!-- Cleanup Dialog -->
+    <v-dialog v-model="cleanupDialog" max-width="500" persistent>
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon icon="mdi-broom" class="mr-2" color="warning" />
+          Cleanup Topics
+        </v-card-title>
+        <v-card-text>
+          <p class="text-body-2 mb-4">
+            <template v-if="cleanupForm.source_name">
+              Purge observations from source
+              <strong>{{ cleanupForm.source_name }}</strong>.
+              Topics with no remaining sources will also be removed.
+            </template>
+            <template v-else>
+              Purge topics across <strong>all sources</strong> based on age.
+            </template>
+          </p>
+
+          <v-radio-group v-model="cleanupForm.mode" hide-details class="mb-3">
+            <v-radio
+              label="Only items older than N days"
+              value="age"
+              color="warning"
+            />
+            <v-radio
+              v-if="cleanupForm.source_name"
+              label="All items from this source (ignore age)"
+              value="all"
+              color="error"
+            />
+          </v-radio-group>
+
+          <v-text-field
+            v-if="cleanupForm.mode === 'age'"
+            v-model.number="cleanupForm.older_than_days"
+            label="Older than (days)"
+            type="number"
+            min="0"
+            max="3650"
+            hint="e.g. 30 for one month, 5 for last work week"
+            persistent-hint
+          />
+
+          <v-alert
+            v-if="cleanupForm.mode === 'all' && cleanupForm.source_name"
+            type="warning"
+            variant="tonal"
+            class="mt-3"
+          >
+            This will delete ALL topic observations from
+            <strong>{{ cleanupForm.source_name }}</strong>, regardless of age.
+          </v-alert>
+
+          <v-alert v-if="cleanupError" type="error" class="mt-3" closable @click:close="cleanupError = null">
+            {{ cleanupError }}
+          </v-alert>
+
+          <v-alert v-if="cleanupResult" type="success" class="mt-3" variant="tonal">
+            Deleted
+            <strong>{{ cleanupResult.topics_deleted }}</strong> topics
+            <span v-if="cleanupResult.source_name">
+              and <strong>{{ cleanupResult.topic_sources_deleted }}</strong>
+              observations from
+              <strong>{{ cleanupResult.source_name }}</strong>
+            </span>
+            <span v-if="cleanupResult.older_than_days !== null">
+              older than {{ cleanupResult.older_than_days }} days
+            </span>.
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="cleanupDialog = false">Close</v-btn>
+          <v-btn
+            color="warning"
+            :loading="cleanupLoading"
+            :disabled="
+              cleanupForm.mode === 'age' &&
+              (cleanupForm.older_than_days === null ||
+                cleanupForm.older_than_days < 0)
+            "
+            @click="doCleanup"
+          >
+            Run Cleanup
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
