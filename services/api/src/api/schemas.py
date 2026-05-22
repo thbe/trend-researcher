@@ -235,6 +235,8 @@ class AIConfigResponse(BaseModel):
     model: str
     api_token: str | None
     business_context: str | None
+    opportunity_criteria: str | None
+    risk_criteria: str | None
     thinking_effort: str
     updated_at: datetime
 
@@ -246,6 +248,8 @@ class AIConfigUpdateRequest(BaseModel):
     model: str | None = None
     api_token: str | None = None
     business_context: str | None = None
+    opportunity_criteria: str | None = None
+    risk_criteria: str | None = None
     thinking_effort: str | None = None
 
 

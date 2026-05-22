@@ -38,6 +38,8 @@ async def _build_pipeline(session_factory):
         api_token = ai_config.api_token
         thinking_effort = ai_config.thinking_effort or "off"
         business_context = ai_config.business_context
+        opportunity_criteria = ai_config.opportunity_criteria
+        risk_criteria = ai_config.risk_criteria
     else:
         settings = get_settings()
         base_url = settings.llm_base_url
@@ -45,6 +47,8 @@ async def _build_pipeline(session_factory):
         api_token = settings.llm_api_key
         thinking_effort = "off"
         business_context = None
+        opportunity_criteria = None
+        risk_criteria = None
 
     # Determine provider from base_url
     if "anthropic" in (base_url or ""):
@@ -58,6 +62,8 @@ async def _build_pipeline(session_factory):
     pipeline = AssessmentPipeline(
         llm=llm, rag=rag, session_factory=session_factory,
         model_id=model, business_context=business_context,
+        opportunity_criteria=opportunity_criteria,
+        risk_criteria=risk_criteria,
     )
     return pipeline
 

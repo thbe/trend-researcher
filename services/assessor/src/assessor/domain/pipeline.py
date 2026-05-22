@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from assessor.domain.prompts import (
     DEFAULT_BUSINESS_CONTEXT,
+    DEFAULT_OPPORTUNITY_CRITERIA,
+    DEFAULT_RISK_CRITERIA,
     PROMPT_VERSION,
     RESPONSE_SCHEMA,
     RETAIL_RELEVANCE_PROMPT,
@@ -36,12 +38,16 @@ class AssessmentPipeline:
         session_factory: async_sessionmaker[AsyncSession],
         model_id: str | None = None,
         business_context: str | None = None,
+        opportunity_criteria: str | None = None,
+        risk_criteria: str | None = None,
     ) -> None:
         self._llm = llm
         self._rag = rag
         self._session_factory = session_factory
         self._model_id = model_id
         self._business_context = business_context or DEFAULT_BUSINESS_CONTEXT
+        self._opportunity_criteria = opportunity_criteria or DEFAULT_OPPORTUNITY_CRITERIA
+        self._risk_criteria = risk_criteria or DEFAULT_RISK_CRITERIA
 
     async def assess_topic(self, topic_id: str) -> dict[str, Any] | None:
         """Assess a single topic and persist the result.
@@ -56,7 +62,9 @@ class AssessmentPipeline:
         # Build messages (prompt assembly lives here in domain, not in adapter)
         messages = [
             {"role": "user", "content": RETAIL_RELEVANCE_SYSTEM.format(
-                business_context=self._business_context
+                business_context=self._business_context,
+                opportunity_criteria=self._opportunity_criteria,
+                risk_criteria=self._risk_criteria,
             )},
             {
                 "role": "user",

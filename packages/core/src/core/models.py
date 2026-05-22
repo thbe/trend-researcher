@@ -304,6 +304,8 @@ class AIConfig(Base):
     model: Mapped[str] = mapped_column(Text, nullable=False, default="qwen3.5:latest")
     api_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     business_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    opportunity_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
+    risk_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
     thinking_effort: Mapped[str] = mapped_column(Text, nullable=False, server_default="low")
     updated_at: Mapped[str] = mapped_column(
         TIMESTAMP(timezone=True),

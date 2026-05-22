@@ -3,6 +3,8 @@ export interface AIConfig {
   model: string
   api_token: string | null
   business_context: string | null
+  opportunity_criteria: string | null
+  risk_criteria: string | null
   thinking_effort: string
   updated_at: string
 }
@@ -20,7 +22,15 @@ export async function getAIConfig(): Promise<AIConfig> {
 }
 
 export async function updateAIConfig(
-  data: { base_url?: string; model?: string; api_token?: string | null; business_context?: string | null; thinking_effort?: string },
+  data: {
+    base_url?: string
+    model?: string
+    api_token?: string | null
+    business_context?: string | null
+    opportunity_criteria?: string | null
+    risk_criteria?: string | null
+    thinking_effort?: string
+  },
 ): Promise<AIConfig> {
   const res = await fetch('/api/ai-config', {
     method: 'PUT',

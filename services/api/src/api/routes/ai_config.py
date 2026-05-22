@@ -42,6 +42,10 @@ async def update_ai_config(
         values["api_token"] = body.api_token if body.api_token != "" else None
     if body.business_context is not None:
         values["business_context"] = body.business_context if body.business_context != "" else None
+    if body.opportunity_criteria is not None:
+        values["opportunity_criteria"] = body.opportunity_criteria if body.opportunity_criteria != "" else None
+    if body.risk_criteria is not None:
+        values["risk_criteria"] = body.risk_criteria if body.risk_criteria != "" else None
     if body.thinking_effort is not None:
         values["thinking_effort"] = body.thinking_effort
 

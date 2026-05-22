@@ -9,7 +9,15 @@ const error = ref<string | null>(null)
 const success = ref<string | null>(null)
 
 // Form fields
-const form = ref({ base_url: '', model: '', api_token: '', business_context: '', thinking_effort: 'off' })
+const form = ref({
+  base_url: '',
+  model: '',
+  api_token: '',
+  business_context: '',
+  opportunity_criteria: '',
+  risk_criteria: '',
+  thinking_effort: 'off',
+})
 
 // Available models from provider
 const availableModels = ref<string[]>([])
@@ -25,6 +33,8 @@ async function load() {
       model: config.value.model,
       api_token: config.value.api_token ?? '',
       business_context: config.value.business_context ?? '',
+      opportunity_criteria: config.value.opportunity_criteria ?? '',
+      risk_criteria: config.value.risk_criteria ?? '',
       thinking_effort: config.value.thinking_effort ?? 'off',
     }
     await fetchModels()
@@ -58,6 +68,8 @@ async function save() {
       model: form.value.model,
       api_token: form.value.api_token || null,
       business_context: form.value.business_context || null,
+      opportunity_criteria: form.value.opportunity_criteria || null,
+      risk_criteria: form.value.risk_criteria || null,
       thinking_effort: form.value.thinking_effort,
     })
     form.value = {
@@ -65,6 +77,8 @@ async function save() {
       model: config.value.model,
       api_token: config.value.api_token ?? '',
       business_context: config.value.business_context ?? '',
+      opportunity_criteria: config.value.opportunity_criteria ?? '',
+      risk_criteria: config.value.risk_criteria ?? '',
       thinking_effort: config.value.thinking_effort ?? 'off',
     }
     success.value = 'AI configuration saved successfully'
@@ -131,11 +145,33 @@ onMounted(load)
             <v-textarea
               v-model="form.business_context"
               label="Business Context"
-              hint="Describe your business so the AI can judge relevance. What counts as an opportunity? What counts as a risk?"
+              hint="Who you are: industry, geography, channels, scale. The AI uses this to interpret your opportunity & risk criteria below."
+              persistent-hint
+              rows="4"
+              auto-grow
+              prepend-icon="mdi-domain"
+              class="mb-4"
+            />
+
+            <v-textarea
+              v-model="form.opportunity_criteria"
+              label="Opportunity Criteria"
+              hint="What counts as an OPPORTUNITY for this business? List concrete signals (one per line). The AI matches topics against these."
               persistent-hint
               rows="6"
               auto-grow
-              prepend-icon="mdi-domain"
+              prepend-icon="mdi-trending-up"
+              class="mb-4"
+            />
+
+            <v-textarea
+              v-model="form.risk_criteria"
+              label="Risk Criteria"
+              hint="What counts as a RISK for this business? List concrete threats (one per line). The AI matches topics against these."
+              persistent-hint
+              rows="6"
+              auto-grow
+              prepend-icon="mdi-alert-octagon-outline"
               class="mb-4"
             />
 
