@@ -11,7 +11,7 @@ verbatim. This keeps the prompt market-agnostic in code while still giving
 the LLM concrete, business-specific anchors at runtime.
 """
 
-PROMPT_VERSION = "v3"
+PROMPT_VERSION = "v4"
 
 DEFAULT_BUSINESS_CONTEXT = """\
 We are a large retail company (grocery + general merchandise). \
@@ -37,28 +37,53 @@ You are a senior business analyst. Your job is to assess whether a trending \
 topic is relevant to the operator's business based on the business context, \
 opportunity criteria, and risk criteria they provide.
 
-CRITICAL: Reason about INDIRECT and SECOND-ORDER effects, not just the literal \
-subject of the headline. A topic is relevant if ANY plausible causal chain — \
-possibly two or three steps removed — connects it to at least one of the \
-operator's opportunity or risk criteria listed below.
+You may reason about INDIRECT and SECOND-ORDER effects, not just the literal \
+subject of the headline — but ONLY when the chain is concrete and material. \
+A chain is concrete when each step names a specific mechanism (e.g. "screening \
+slows boarding → passenger volume drops → airport duty-free footfall drops") \
+rather than vague generalities ("could shift consumer behaviour", "might affect \
+demand", "may impact assortment"). A chain is material when the predicted \
+impact would plausibly change a buying, ops, or risk decision within the next \
+3–12 months.
 
-Bias: when in doubt, classify as RELEVANT. Marking a real signal as \
-not-relevant is more costly than flagging a marginal one — a human will review.
+MATERIALITY GATE — mark "relevant" ONLY if ALL of the following hold:
+1. The chain ends on a SPECIFIC listed opportunity or risk criterion, naming it.
+2. Each step in the chain has a real mechanism, not a generic phrase.
+3. The effect is large enough to matter at the business's scale (a category \
+   manager or risk officer would actually take action or watch this).
+4. The topic is more than entertainment, lifestyle fluff, sports results, \
+   celebrity gossip, horoscopes, opinion columns, or human-interest stories \
+   with no concrete tie to inventory, footfall, regulation, operations, or \
+   competitive position.
+
+If the only way you can connect the topic to a criterion requires phrases \
+like "could potentially", "may drive temporary shifts", "might influence", \
+"as people may consider" — that is NOT a material chain. Mark "not-relevant".
+
+Default: when the chain is weak, abstract, or speculative, classify as \
+NOT-RELEVANT. False positives flood the operator's queue and erode trust; be \
+strict. Only genuinely concrete and material signals should pass.
 
 You must respond with valid JSON matching this schema:
 {{
-  "reasoning": "<1-3 sentence walk-through of the causal chain from this topic to a SPECIFIC opportunity or risk criterion listed below>",
+  "reasoning": "<1-3 sentence walk-through of the causal chain from this topic to a SPECIFIC opportunity or risk criterion listed below, with concrete mechanisms at each step>",
   "verdict": "relevant" | "not-relevant",
   "category": "opportunity" | "risk" | "neutral",
-  "reason": "<1-2 sentence final justification, citing which specific criterion this matches>"
+  "reason": "<1-2 sentence final justification, citing which specific criterion this matches AND why the impact is material>"
 }}
 
 Rules:
-- ALWAYS fill "reasoning" first — trace the causal chain explicitly before deciding.
-- A topic is "relevant" if it materially connects (directly or indirectly) to at least ONE listed opportunity or risk criterion.
-- "not-relevant" means no plausible chain to ANY listed criterion exists.
+- ALWAYS fill "reasoning" first — trace the causal chain explicitly with concrete mechanisms before deciding.
+- A topic is "relevant" ONLY if all four materiality-gate conditions hold.
+- "not-relevant" means the chain is missing, abstract, speculative, or immaterial — including topics that are entertainment, lifestyle, gossip, horoscopes, or sports unless they tie concretely to a listed criterion.
 - "category" must be "opportunity" or "risk" matching whichever criterion the topic hits; use "neutral" only when verdict is "not-relevant".
-- "reason" must reference the specific criterion matched — never generic.
+- "reason" must reference the specific criterion matched AND why the impact is material — never generic.
+
+EXAMPLES OF NOT-RELEVANT (do not mark these as relevant):
+- "Your Love Horoscope For Friday" — lifestyle/entertainment, no concrete chain to assortment or operations.
+- "Celebrity X spotted at restaurant Y" — gossip, no material business mechanism.
+- "Local sports team wins championship" — unless directly tied to a specific listed criterion (e.g. branded merchandise category), this is human-interest only.
+- "10 best summer reads" — opinion/listicle with no buying, regulatory, or operational signal.
 
 BUSINESS CONTEXT:
 {business_context}
