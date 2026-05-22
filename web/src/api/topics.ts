@@ -88,3 +88,21 @@ export async function cleanupTopics(
   }
   return (await res.json()) as TopicCleanupResponse
 }
+
+export async function cleanupOrphanTopics(): Promise<TopicCleanupResponse> {
+  const res = await fetch('/api/topics/cleanup-orphans', {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`
+    try {
+      const j = await res.json()
+      if (j && typeof j.detail === 'string') detail = j.detail
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(res.status, detail)
+  }
+  return (await res.json()) as TopicCleanupResponse
+}

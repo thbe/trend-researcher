@@ -8,7 +8,7 @@ import {
   type CrawlConfig,
   type CrawlConfigCreate,
 } from '@/api/crawlConfig'
-import { cleanupTopics, type TopicCleanupResponse } from '@/api/topics'
+import { cleanupOrphanTopics, cleanupTopics, type TopicCleanupResponse } from '@/api/topics'
 
 const configs = ref<CrawlConfig[]>([])
 const loading = ref(false)
@@ -48,6 +48,31 @@ const cleanupForm = ref<{ source_name: string | null; older_than_days: number | 
 const cleanupLoading = ref(false)
 const cleanupResult = ref<TopicCleanupResponse | null>(null)
 const cleanupError = ref<string | null>(null)
+
+// Orphan cleanup state
+const orphanDialog = ref(false)
+const orphanLoading = ref(false)
+const orphanResult = ref<TopicCleanupResponse | null>(null)
+const orphanError = ref<string | null>(null)
+
+function openOrphanDialog() {
+  orphanResult.value = null
+  orphanError.value = null
+  orphanDialog.value = true
+}
+
+async function doOrphanCleanup() {
+  orphanLoading.value = true
+  orphanError.value = null
+  orphanResult.value = null
+  try {
+    orphanResult.value = await cleanupOrphanTopics()
+  } catch (e: any) {
+    orphanError.value = e.message || 'Orphan cleanup failed'
+  } finally {
+    orphanLoading.value = false
+  }
+}
 
 async function load() {
   loading.value = true
@@ -230,6 +255,15 @@ async function doCleanup() {
             @click="openCleanupDialog(null)"
           >
             Cleanup
+          </v-btn>
+          <v-btn
+            color="warning"
+            variant="tonal"
+            prepend-icon="mdi-link-variant-off"
+            class="mr-2"
+            @click="openOrphanDialog"
+          >
+            Clean Orphans
           </v-btn>
           <v-btn color="primary" prepend-icon="mdi-plus" @click="openAddDialog">
             Add Source
@@ -552,6 +586,44 @@ async function doCleanup() {
             @click="doCleanup"
           >
             Run Cleanup
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Orphan Cleanup Dialog -->
+    <v-dialog v-model="orphanDialog" max-width="480" persistent>
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon icon="mdi-link-variant-off" class="mr-2" color="warning" />
+          Clean Orphan Topics
+        </v-card-title>
+        <v-card-text>
+          <p class="mb-2">
+            Deletes topics that have no associated source observations
+            (i.e. orphans left over from manual edits or partial cleanups).
+          </p>
+          <p class="text-caption text-medium-emphasis mb-0">
+            Safe to run any time — it is a no-op when no orphans exist.
+          </p>
+
+          <v-alert v-if="orphanError" type="error" class="mt-3" variant="tonal">
+            {{ orphanError }}
+          </v-alert>
+
+          <v-alert v-if="orphanResult" type="success" class="mt-3" variant="tonal">
+            Deleted <strong>{{ orphanResult.topics_deleted }}</strong> orphan topic(s).
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="orphanDialog = false">Close</v-btn>
+          <v-btn
+            color="warning"
+            :loading="orphanLoading"
+            @click="doOrphanCleanup"
+          >
+            Clean Orphans
           </v-btn>
         </v-card-actions>
       </v-card>

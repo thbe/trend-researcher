@@ -299,4 +299,33 @@ async def cleanup_topics(
     )
 
 
+@router.post("/topics/cleanup-orphans", response_model=TopicCleanupResponse)
+async def cleanup_orphan_topics(
+    session: AsyncSession = Depends(get_session),
+) -> TopicCleanupResponse:
+    """Delete topics that have zero associated ``topic_sources`` rows.
+
+    Orphans shouldn't normally exist (the FK has ON DELETE CASCADE), but they
+    can appear if rows were inserted manually, if a previous cleanup raced
+    with an ingest, or after a partial restore. Safe to run any time — it is
+    a no-op when there are no orphans.
+    """
+    orphan_subq = (
+        select(Topic.id)
+        .outerjoin(TopicSource, TopicSource.topic_id == Topic.id)
+        .group_by(Topic.id)
+        .having(func.count(TopicSource.id) == 0)
+    )
+    result = await session.execute(delete(Topic).where(Topic.id.in_(orphan_subq)))
+    topics_deleted = int(result.rowcount or 0)  # type: ignore[attr-defined]
+    await session.commit()
+
+    return TopicCleanupResponse(
+        topic_sources_deleted=0,
+        topics_deleted=topics_deleted,
+        source_name=None,
+        older_than_days=None,
+    )
+
+
 __all__ = ["router"]
