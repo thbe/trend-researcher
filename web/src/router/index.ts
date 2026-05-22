@@ -28,8 +28,8 @@ const routes: RouteRecordRaw[] = [
     props: true,
   },
   {
-    path: '/config',
-    name: 'crawl-config',
+    path: '/sources',
+    name: 'sources',
     component: () => import('@/views/CrawlConfig.vue'),
   },
   {
