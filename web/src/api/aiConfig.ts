@@ -6,6 +6,7 @@ export interface AIConfig {
   opportunity_criteria: string | null
   risk_criteria: string | null
   thinking_effort: string
+  request_timeout_seconds: number
   updated_at: string
 }
 
@@ -30,6 +31,7 @@ export async function updateAIConfig(
     opportunity_criteria?: string | null
     risk_criteria?: string | null
     thinking_effort?: string
+    request_timeout_seconds?: number
   },
 ): Promise<AIConfig> {
   const res = await fetch('/api/ai-config', {

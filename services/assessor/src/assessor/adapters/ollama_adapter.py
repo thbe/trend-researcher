@@ -27,10 +27,12 @@ class OllamaAdapter:
         base_url: str = "http://localhost:11434",
         default_model: str = "llama3",
         thinking_effort: str = "off",
+        request_timeout_seconds: float = 120.0,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._default_model = default_model
         self._thinking_effort = thinking_effort
+        self._request_timeout_seconds = float(request_timeout_seconds)
 
     async def complete(
         self,
@@ -57,14 +59,18 @@ class OllamaAdapter:
         if response_schema:
             body["format"] = "json"
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=self._request_timeout_seconds) as client:
             try:
                 resp = await client.post(
                     f"{self._base_url}/api/chat",
                     json=body,
                 )
             except httpx.TimeoutException:
-                raise RuntimeError(f"Ollama timeout: model '{model}' did not respond within 120s")
+                raise RuntimeError(
+                    f"Ollama timeout: model '{model}' did not respond within "
+                    f"{self._request_timeout_seconds:.0f}s (configurable via "
+                    f"ai_config.request_timeout_seconds)"
+                )
             except httpx.ConnectError:
                 raise RuntimeError(f"Cannot connect to Ollama at {self._base_url}")
             except httpx.RemoteProtocolError:

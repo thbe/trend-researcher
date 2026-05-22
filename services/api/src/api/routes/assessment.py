@@ -40,6 +40,7 @@ async def _build_pipeline(session_factory):
         business_context = ai_config.business_context
         opportunity_criteria = ai_config.opportunity_criteria
         risk_criteria = ai_config.risk_criteria
+        request_timeout_seconds = ai_config.request_timeout_seconds or 120
     else:
         settings = get_settings()
         base_url = settings.llm_base_url
@@ -49,6 +50,7 @@ async def _build_pipeline(session_factory):
         business_context = None
         opportunity_criteria = None
         risk_criteria = None
+        request_timeout_seconds = 120
 
     # Determine provider from base_url
     if "anthropic" in (base_url or ""):
@@ -56,7 +58,12 @@ async def _build_pipeline(session_factory):
     elif "openai" in (base_url or "") or (api_token and "anthropic" not in (base_url or "")):
         llm = OpenAIAdapter(base_url=base_url, api_key=api_token or "no-key", default_model=model)
     else:
-        llm = OllamaAdapter(base_url=base_url, default_model=model, thinking_effort=thinking_effort)
+        llm = OllamaAdapter(
+            base_url=base_url,
+            default_model=model,
+            thinking_effort=thinking_effort,
+            request_timeout_seconds=float(request_timeout_seconds),
+        )
 
     rag = PostgresRAGAdapter(session_factory)
     pipeline = AssessmentPipeline(

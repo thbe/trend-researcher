@@ -307,6 +307,7 @@ class AIConfig(Base):
     opportunity_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
     risk_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
     thinking_effort: Mapped[str] = mapped_column(Text, nullable=False, server_default="low")
+    request_timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, server_default="120")
     updated_at: Mapped[str] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,

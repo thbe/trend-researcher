@@ -48,6 +48,8 @@ async def update_ai_config(
         values["risk_criteria"] = body.risk_criteria if body.risk_criteria != "" else None
     if body.thinking_effort is not None:
         values["thinking_effort"] = body.thinking_effort
+    if body.request_timeout_seconds is not None:
+        values["request_timeout_seconds"] = body.request_timeout_seconds
 
     if len(values) == 1:
         raise HTTPException(status_code=400, detail="No fields to update")

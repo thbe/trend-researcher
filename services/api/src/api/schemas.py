@@ -238,6 +238,7 @@ class AIConfigResponse(BaseModel):
     opportunity_criteria: str | None
     risk_criteria: str | None
     thinking_effort: str
+    request_timeout_seconds: int
     updated_at: datetime
 
 
@@ -251,6 +252,7 @@ class AIConfigUpdateRequest(BaseModel):
     opportunity_criteria: str | None = None
     risk_criteria: str | None = None
     thinking_effort: str | None = None
+    request_timeout_seconds: int | None = Field(None, ge=10, le=3600)
 
 
 __all__ = [

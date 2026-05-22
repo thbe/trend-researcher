@@ -17,6 +17,7 @@ const form = ref({
   opportunity_criteria: '',
   risk_criteria: '',
   thinking_effort: 'off',
+  request_timeout_seconds: 120,
 })
 
 // Available models from provider
@@ -36,6 +37,7 @@ async function load() {
       opportunity_criteria: config.value.opportunity_criteria ?? '',
       risk_criteria: config.value.risk_criteria ?? '',
       thinking_effort: config.value.thinking_effort ?? 'off',
+      request_timeout_seconds: config.value.request_timeout_seconds ?? 120,
     }
     await fetchModels()
   } catch (e: any) {
@@ -71,6 +73,7 @@ async function save() {
       opportunity_criteria: form.value.opportunity_criteria || null,
       risk_criteria: form.value.risk_criteria || null,
       thinking_effort: form.value.thinking_effort,
+      request_timeout_seconds: form.value.request_timeout_seconds,
     })
     form.value = {
       base_url: config.value.base_url,
@@ -80,6 +83,7 @@ async function save() {
       opportunity_criteria: config.value.opportunity_criteria ?? '',
       risk_criteria: config.value.risk_criteria ?? '',
       thinking_effort: config.value.thinking_effort ?? 'off',
+      request_timeout_seconds: config.value.request_timeout_seconds ?? 120,
     }
     success.value = 'AI configuration saved successfully'
   } catch (e: any) {
@@ -187,6 +191,18 @@ onMounted(load)
               hint="Controls how much reasoning the model does before answering. Higher = better but slower."
               persistent-hint
               prepend-icon="mdi-head-cog-outline"
+            />
+
+            <v-text-field
+              v-model.number="form.request_timeout_seconds"
+              type="number"
+              min="10"
+              max="3600"
+              label="Request Timeout (seconds)"
+              hint="Per-LLM-request timeout in seconds. Increase for slow local models on CPU (e.g. 300–600). Default: 120."
+              persistent-hint
+              prepend-icon="mdi-timer-outline"
+              class="mt-4"
             />
           </v-card-text>
 
