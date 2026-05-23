@@ -58,7 +58,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://trend:trend@postgres:5432/trend_researcher
       LOG_FORMAT: json
     ports:
-      - "8000:8000"
+      - "4000:8000"
     volumes:
       # G9 persistence: dumps land here. Compose uses external Postgres, so
       # the dump path is mostly exercised by the prod image (Cloud Run + GCS),
@@ -68,6 +68,21 @@ services:
     stop_grace_period: 30s
     restart: unless-stopped
 
+  ollama:
+    image: ollama/ollama
+    container_name: trend-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   appdata:
+  ollama_data:

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { listTopics, type Topic } from '@/api/topics'
 import { assessBatch } from '@/api/assessment'
 import { ApiError } from '@/api/client'
@@ -18,12 +18,31 @@ interface DataTableOptions {
 }
 
 const router = useRouter()
+const route = useRoute()
+
+// Restore list state from URL query so back-navigation from a detail view
+// returns the user to the exact page, page size, and sort they had open.
+function parseSortFromQuery(raw: unknown): SortItem[] {
+  const s = typeof raw === 'string' && raw.length > 0 ? raw : '-last_seen_at'
+  const desc = s.startsWith('-')
+  const key = desc ? s.slice(1) : s
+  // Map API sort key back to column key (inverse of SORT_KEY_MAP).
+  const columnKey = key === 'longevity' ? 'longevity_seconds' : key
+  return [{ key: columnKey, order: desc ? 'desc' : 'asc' }]
+}
+
+const initialPage = Math.max(1, Number.parseInt(String(route.query.page ?? '1'), 10) || 1)
+const initialIpp = (() => {
+  const n = Number.parseInt(String(route.query.ipp ?? '20'), 10)
+  return [10, 20, 50, 100].includes(n) ? n : 20
+})()
 
 const items = ref<Topic[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
-const itemsPerPage = ref(20)
-const sortBy = ref<SortItem[]>([{ key: 'last_seen_at', order: 'desc' }])
+const page = ref(initialPage)
+const itemsPerPage = ref(initialIpp)
+const sortBy = ref<SortItem[]>(parseSortFromQuery(route.query.sort))
 const totalItems = ref(0)
 const echoedSort = ref('-last_seen_at')
 
@@ -37,6 +56,7 @@ const SORT_KEY_MAP: Record<string, string> = {
 const headers = [
   { title: 'Title', key: 'title', sortable: false },
   { title: 'Description', key: 'description', sortable: false },
+  { title: 'Source', key: 'source_names', sortable: false, width: '140px' },
   { title: 'Verdict', key: 'relevance_verdict', sortable: false, width: '120px' },
   { title: 'Sources', key: 'breadth', align: 'end' as const, sortable: true },
   {
@@ -88,9 +108,10 @@ async function load(options: DataTableOptions) {
   error.value = null
   try {
     const sort = apiSortString(options.sortBy)
-    const resp = await listTopics(sort, options.itemsPerPage)
+    const offset = (options.page - 1) * options.itemsPerPage
+    const resp = await listTopics(sort, options.itemsPerPage, offset)
     items.value = resp.topics
-    totalItems.value = resp.topics.length
+    totalItems.value = resp.total
     echoedSort.value = resp.sort
   } catch (err) {
     if (err instanceof ApiError) {
@@ -106,8 +127,19 @@ async function load(options: DataTableOptions) {
 }
 
 function onUpdateOptions(options: DataTableOptions) {
+  page.value = options.page
   itemsPerPage.value = options.itemsPerPage
   sortBy.value = options.sortBy
+  // Persist list state in URL so browser-back from TopicDetail restores it.
+  const sortStr = apiSortString(options.sortBy)
+  void router.replace({
+    query: {
+      ...route.query,
+      page: String(options.page),
+      ipp: String(options.itemsPerPage),
+      sort: sortStr,
+    },
+  })
   void load(options)
 }
 
@@ -123,11 +155,12 @@ async function triggerCrawl() {
   crawling.value = true
   actionMessage.value = null
   try {
-    const resp = await fetch('/api/internal/crawl', { method: 'POST' })
+    const resp = await fetch('/api/crawl', { method: 'POST' })
     if (!resp.ok) throw new Error(`Crawl failed: ${resp.status}`)
     const data = await resp.json()
-    actionMessage.value = `Crawl complete — ${data.new_topics ?? 0} new, ${data.updated_topics ?? 0} updated`
+    actionMessage.value = `Crawl complete — ${data.totals?.inserted ?? 0} new, ${data.totals?.updated ?? 0} updated`
     // Reload topics
+    page.value = 1
     void load({ page: 1, itemsPerPage: itemsPerPage.value, sortBy: sortBy.value })
   } catch (e) {
     actionMessage.value = `Crawl error: ${(e as Error).message}`
@@ -141,8 +174,9 @@ async function triggerAssess() {
   actionMessage.value = null
   try {
     const data = await assessBatch()
-    actionMessage.value = `Assessed ${data.assessed} topics — ${data.relevant} relevant`
+    actionMessage.value = `Assessment job started (${data.total_topics} topics queued)`
     // Reload topics to show updated verdicts
+    page.value = 1
     void load({ page: 1, itemsPerPage: itemsPerPage.value, sortBy: sortBy.value })
   } catch (e) {
     actionMessage.value = `Assessment error: ${(e as Error).message}`
@@ -153,7 +187,7 @@ async function triggerAssess() {
 
 onMounted(() => {
   void load({
-    page: 1,
+    page: page.value,
     itemsPerPage: itemsPerPage.value,
     sortBy: sortBy.value,
   })
@@ -215,8 +249,9 @@ onMounted(() => {
       :items="items"
       :items-length="totalItems"
       :loading="loading"
-      :items-per-page="itemsPerPage"
-      :sort-by="sortBy"
+      v-model:items-per-page="itemsPerPage"
+      v-model:page="page"
+      v-model:sort-by="sortBy"
       :items-per-page-options="[10, 20, 50, 100]"
       hover
       density="comfortable"
@@ -233,6 +268,12 @@ onMounted(() => {
           truncate(item.description)
         }}</span>
         <em v-else class="text-disabled">—</em>
+      </template>
+      <template #item.source_names="{ item }">
+        <template v-if="item.source_names">
+          <v-chip v-for="s in item.source_names.split(', ')" :key="s" size="x-small" variant="tonal" class="ma-1">{{ s }}</v-chip>
+        </template>
+        <span v-else class="text-disabled">—</span>
       </template>
       <template #item.relevance_verdict="{ item }">
         <v-chip

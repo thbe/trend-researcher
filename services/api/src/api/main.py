@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import FileResponse
 
 import core
 from api.auth.middleware import AuthMiddleware
@@ -35,6 +36,8 @@ from api.routes import topics as topics_routes
 from api.routes import auth as auth_routes
 from api.routes import crawl_config as crawl_config_routes
 from api.routes import assessment as assessment_routes
+from api.routes import ai_config as ai_config_routes
+from api.routes import dashboard as dashboard_routes
 
 
 @asynccontextmanager
@@ -69,6 +72,8 @@ app.include_router(runs_routes.router, prefix="/api")
 app.include_router(topics_routes.router, prefix="/api")
 app.include_router(crawl_config_routes.router, prefix="/api")
 app.include_router(assessment_routes.router, prefix="/api")
+app.include_router(ai_config_routes.router, prefix="/api")
+app.include_router(dashboard_routes.router, prefix="/api")
 app.include_router(internal_routes.router, prefix="/api")
 
 # Auth middleware: protects all /api/* except /api/login and /api/healthz
@@ -81,12 +86,24 @@ _debouncer = build_dump_debouncer()
 if _debouncer is not None:
     app.add_middleware(DumpDebouncerMiddleware, debouncer=_debouncer)
 
-# Mount the SPA LAST so ``/api/*`` routers always win. StaticFiles with
-# ``html=True`` serves ``index.html`` for any unmatched path, which is what
-# Vue Router's HTML5 history mode expects.
+# Mount the SPA LAST so ``/api/*`` routers always win. Custom subclass
+# serves index.html for any path that doesn't match a real static file,
+# which is what Vue Router's HTML5 history mode expects.
 _web_dist = get_web_dist_dir()
 if _web_dist is not None:
-    app.mount("/", StaticFiles(directory=str(_web_dist), html=True), name="spa")
+    class _SPAStaticFiles(StaticFiles):
+        """StaticFiles that falls back to index.html for SPA routes."""
+
+        async def get_response(self, path: str, scope):  # type: ignore[override]
+            try:
+                response = await super().get_response(path, scope)
+                if response.status_code == 404:
+                    return FileResponse(str(_web_dist / "index.html"), media_type="text/html")
+                return response
+            except Exception:
+                return FileResponse(str(_web_dist / "index.html"), media_type="text/html")
+
+    app.mount("/", _SPAStaticFiles(directory=str(_web_dist), html=True), name="spa")
 
 
 __all__ = ["app"]

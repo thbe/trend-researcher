@@ -2,7 +2,7 @@
 // Field shapes mirror services/api/src/api/schemas.py
 // (TopicResponse, TopicsListResponse, TopicSourceResponse,
 // TopicDetailResponse).
-import { request } from './client'
+import { ApiError, request } from './client'
 
 export interface Topic {
   id: string
@@ -14,6 +14,7 @@ export interface Topic {
   breadth: number
   longevity_seconds: number
   relevance_verdict: string | null
+  source_names: string | null
 }
 
 export interface TopicSource {
@@ -36,18 +37,72 @@ export interface TopicDetail extends Topic {
 
 export interface TopicsListResponse {
   topics: Topic[]
+  total: number
   limit: number
+  offset: number
   sort: string
 }
 
 export function listTopics(
   sort: string = '-last_seen_at',
   limit: number = 20,
+  offset: number = 0,
 ): Promise<TopicsListResponse> {
-  const params = new URLSearchParams({ sort, limit: String(limit) })
+  const params = new URLSearchParams({ sort, limit: String(limit), offset: String(offset) })
   return request<TopicsListResponse>(`/api/topics?${params.toString()}`)
 }
 
 export function getTopic(id: string): Promise<TopicDetail> {
   return request<TopicDetail>(`/api/topics/${encodeURIComponent(id)}`)
+}
+
+export interface TopicCleanupRequest {
+  source_name?: string | null
+  older_than_days?: number | null
+}
+
+export interface TopicCleanupResponse {
+  topic_sources_deleted: number
+  topics_deleted: number
+  source_name: string | null
+  older_than_days: number | null
+}
+
+export async function cleanupTopics(
+  body: TopicCleanupRequest,
+): Promise<TopicCleanupResponse> {
+  const res = await fetch('/api/topics/cleanup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`
+    try {
+      const j = await res.json()
+      if (j && typeof j.detail === 'string') detail = j.detail
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(res.status, detail)
+  }
+  return (await res.json()) as TopicCleanupResponse
+}
+
+export async function cleanupOrphanTopics(): Promise<TopicCleanupResponse> {
+  const res = await fetch('/api/topics/cleanup-orphans', {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`
+    try {
+      const j = await res.json()
+      if (j && typeof j.detail === 'string') detail = j.detail
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(res.status, detail)
+  }
+  return (await res.json()) as TopicCleanupResponse
 }

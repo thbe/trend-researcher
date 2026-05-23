@@ -162,12 +162,13 @@ async def build_sources_from_db(
     sources: list[SourcePort] = []
     for cfg in rows:
         if cfg.source_name == "hackernews":
-            src: SourcePort = HackerNewsSource()
+            src: SourcePort = HackerNewsSource(verify_ssl=cfg.verify_ssl)
         elif cfg.feed_url:
             src = RssSource(
                 name=cfg.source_name,
                 feed_url=cfg.feed_url,
                 capture_summary=cfg.capture_summary,
+                verify_ssl=cfg.verify_ssl,
             )
         else:
             _log.warning(

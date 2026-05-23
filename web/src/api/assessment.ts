@@ -12,29 +12,53 @@ export interface BusinessCase {
   generated_at: string
 }
 
-export interface AssessBatchResponse {
-  assessed: number
-  relevant: number
-  results: Array<{
-    relevance_verdict: string
-    relevance_reason: string
-    topic_id: string
-  }>
+export interface AssessJobResponse {
+  job_id: string
+  state: string
+  total_topics: number
 }
 
-export function listBusinessCases(limit = 50): Promise<BusinessCase[]> {
-  return request<BusinessCase[]>(`/api/business-cases?limit=${limit}`)
+export interface AssessJob {
+  id: string
+  state: string // pending, running, completed, failed
+  total_topics: number
+  completed_topics: number
+  failed_topics: number
+  results: { assessed: number; relevant: number; details: unknown[] } | null
+  error: string | null
+  created_at: string | null
+  started_at: string | null
+  finished_at: string | null
 }
 
-export async function assessBatch(): Promise<AssessBatchResponse> {
+export function listBusinessCases(limit = 50, category?: string): Promise<BusinessCase[]> {
+  let url = `/api/business-cases?limit=${limit}`
+  if (category) url += `&category=${encodeURIComponent(category)}`
+  return request<BusinessCase[]>(url)
+}
+
+export async function assessBatch(): Promise<AssessJobResponse> {
   const response = await fetch('/api/assess', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   })
   if (!response.ok) {
-    throw new Error(`Assessment failed: ${response.status}`)
+    let detail = `Assessment failed: ${response.status}`
+    try {
+      const body = await response.json()
+      if (body?.detail) detail = body.detail
+    } catch { /* ignore */ }
+    throw new Error(detail)
   }
   return response.json()
+}
+
+export function getJob(jobId: string): Promise<AssessJob> {
+  return request<AssessJob>(`/api/assess/jobs/${encodeURIComponent(jobId)}`)
+}
+
+export function listJobs(limit = 10): Promise<AssessJob[]> {
+  return request<AssessJob[]>(`/api/assess/jobs?limit=${limit}`)
 }
 
 export async function assessTopic(topicId: string): Promise<Record<string, unknown>> {
@@ -43,7 +67,12 @@ export async function assessTopic(topicId: string): Promise<Record<string, unkno
     headers: { 'Content-Type': 'application/json' },
   })
   if (!response.ok) {
-    throw new Error(`Assessment failed: ${response.status}`)
+    let detail = `Assessment failed: ${response.status}`
+    try {
+      const body = await response.json()
+      if (body?.detail) detail = body.detail
+    } catch { /* ignore */ }
+    throw new Error(detail)
   }
   return response.json()
 }

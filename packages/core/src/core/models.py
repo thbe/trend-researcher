@@ -242,6 +242,9 @@ class CrawlConfig(Base):
     capture_summary: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )
+    verify_ssl: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
     feed_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[str] = mapped_column(
         TIMESTAMP(timezone=True),
@@ -287,4 +290,68 @@ class BusinessCase(Base):
     )
 
 
-__all__ = ["Base", "BusinessCase", "CrawlConfig", "CrawlRun", "Topic", "TopicSource", "User"]
+class AIConfig(Base):
+    """Singleton row holding the AI/LLM connection settings.
+
+    Only one row (key='default') is expected. The UI reads/writes this row
+    to configure which Ollama (or compatible) endpoint is used for assessment.
+    """
+
+    __tablename__ = "ai_config"
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True, default="default")
+    base_url: Mapped[str] = mapped_column(Text, nullable=False, default="http://ollama:11434")
+    model: Mapped[str] = mapped_column(Text, nullable=False, default="qwen3.5:latest")
+    api_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    business_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    opportunity_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
+    risk_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
+    thinking_effort: Mapped[str] = mapped_column(Text, nullable=False, server_default="low")
+    request_timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, server_default="120")
+    updated_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+
+class AssessmentJob(Base):
+    """Background assessment job tracking (Phase 7).
+
+    Each row represents one batch assessment run. The background worker
+    updates progress/state as it processes topics.
+    """
+
+    __tablename__ = "assessment_jobs"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    state: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default="pending"
+    )  # pending, running, completed, failed
+    total_topics: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completed_topics: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    failed_topics: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    results: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+    started_at: Mapped[str | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    finished_at: Mapped[str | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+
+
+__all__ = ["AIConfig", "AssessmentJob", "Base", "BusinessCase", "CrawlConfig", "CrawlRun", "Topic", "TopicSource", "User"]

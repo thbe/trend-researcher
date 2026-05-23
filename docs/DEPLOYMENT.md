@@ -4,6 +4,8 @@
 
 Trend Researcher runs as a **single Cloud Run service** with an embedded PostgreSQL 16 database. Data is persisted via pg_dump/restore to a GCS bucket mounted at `/app/data` using Cloud Run gen2 cloud-storage volumes (GCS-FUSE).
 
+> Component-level architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md). REST contract: [`API.md`](API.md).
+
 | Property | Value |
 |----------|-------|
 | GCP Project | `thbe-private` |
@@ -111,6 +113,18 @@ Maximum data loss window: ~30 seconds (debounce interval).
 | `PG_USER` | `trend_app` | Embedded PG user |
 | `PG_DB` | `trend_researcher` | Embedded PG database name |
 | `WEB_DIST_DIR` | `/app/web_dist` | SPA static files path |
+
+### LLM Provider (configured in DB, not env)
+
+Stage 2 assessment configuration lives in the `ai_config` table and is edited from the UI (`/ai-config`) or `PUT /api/ai-config`. The Cloud Run image does **not** bundle Ollama — in production `base_url` must point at a hosted endpoint:
+
+| `base_url` contains | Adapter used | `api_token` required |
+|---------------------|--------------|----------------------|
+| `anthropic` | Anthropic | yes |
+| `openai` (or any `api_token` set) | OpenAI-compatible | yes |
+| anything else | Ollama (HTTP) | no |
+
+Rotating an API key is a `PUT /api/ai-config` call — no redeploy needed.
 
 ---
 

@@ -29,14 +29,17 @@ Mounted at ``/api/topics`` (prefix applied in ``main.py``, per G2).
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from sqlalchemy import Column, MetaData, Table, select
+from sqlalchemy import Column, MetaData, Table, delete, select, func, literal_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import get_session
 from api.schemas import (
+    TopicCleanupRequest,
+    TopicCleanupResponse,
     TopicDetailResponse,
     TopicResponse,
     TopicSourceResponse,
@@ -91,7 +94,8 @@ def _parse_sort(sort: str) -> tuple[str, bool]:
 @router.get("/topics", response_model=TopicsListResponse)
 async def list_topics(
     sort: str = Query(_DEFAULT_SORT),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     session: AsyncSession = Depends(get_session),
 ) -> TopicsListResponse:
     """Return up to ``limit`` topics joined with derived stats, sorted per ``sort``."""
@@ -111,6 +115,15 @@ async def list_topics(
         .label("relevance_verdict")
     )
 
+    # Subquery: distinct source names as comma-separated string
+    source_names_sub = (
+        select(func.string_agg(func.distinct(TopicSource.source_name), literal_column("', '")))
+        .where(TopicSource.topic_id == Topic.id)
+        .correlate(Topic)
+        .scalar_subquery()
+        .label("source_names")
+    )
+
     stmt = (
         select(
             Topic.id,
@@ -122,6 +135,7 @@ async def list_topics(
             _v_topic_stats.c.breadth,
             _v_topic_stats.c.longevity_seconds,
             latest_verdict,
+            source_names_sub,
         )
         .select_from(
             Topic.__table__.outerjoin(  # type: ignore[attr-defined]
@@ -130,14 +144,21 @@ async def list_topics(
             )
         )
         .order_by(order_expr, Topic.id)
+        .offset(offset)
         .limit(limit)
     )
     result = await session.execute(stmt)
     rows = result.mappings().all()
 
+    # Total count for pagination
+    count_stmt = select(func.count(Topic.id))
+    total = (await session.execute(count_stmt)).scalar() or 0
+
     return TopicsListResponse(
         topics=[TopicResponse.model_validate(dict(row)) for row in rows],
+        total=total,
         limit=limit,
+        offset=offset,
         sort=sort,
     )
 
@@ -203,6 +224,108 @@ async def get_topic(
     payload["sources"] = [TopicSourceResponse.model_validate(s) for s in source_rows]
 
     return TopicDetailResponse.model_validate(payload)
+
+
+@router.post("/topics/cleanup", response_model=TopicCleanupResponse)
+async def cleanup_topics(
+    body: TopicCleanupRequest,
+    session: AsyncSession = Depends(get_session),
+) -> TopicCleanupResponse:
+    """Manually purge topics / topic observations.
+
+    Filters (AND-combined):
+    - ``source_name``: restrict to observations from this source only.
+    - ``older_than_days``: restrict to items older than N days
+      (``observed_at`` for sources, ``last_seen_at`` for topics).
+
+    At least one filter is required (empty body → 400) so an accidental
+    call cannot wipe the entire store.
+
+    Behaviour:
+    - If ``source_name`` is given, delete matching ``topic_sources`` rows
+      first, then sweep any ``topics`` left with zero remaining sources.
+    - If ``source_name`` is omitted, delete ``topics`` whose
+      ``last_seen_at`` is older than the cutoff (cascade removes their
+      ``topic_sources``).
+    """
+
+    if body.source_name is None and body.older_than_days is None:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one of source_name or older_than_days is required.",
+        )
+
+    cutoff: datetime | None = None
+    if body.older_than_days is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=body.older_than_days)
+
+    sources_deleted = 0
+    topics_deleted = 0
+
+    if body.source_name is not None:
+        # Step 1: delete matching topic_sources rows.
+        src_stmt = delete(TopicSource).where(TopicSource.source_name == body.source_name)
+        if cutoff is not None:
+            src_stmt = src_stmt.where(TopicSource.observed_at < cutoff)
+        src_result = await session.execute(src_stmt)
+        sources_deleted = int(src_result.rowcount or 0)  # type: ignore[attr-defined]
+
+        # Step 2: delete orphan topics (no remaining sources at all).
+        orphan_subq = (
+            select(Topic.id)
+            .outerjoin(TopicSource, TopicSource.topic_id == Topic.id)
+            .group_by(Topic.id)
+            .having(func.count(TopicSource.id) == 0)
+        )
+        topic_stmt = delete(Topic).where(Topic.id.in_(orphan_subq))
+        topic_result = await session.execute(topic_stmt)
+        topics_deleted = int(topic_result.rowcount or 0)  # type: ignore[attr-defined]
+    else:
+        # No source filter → age-only purge across all topics.
+        assert cutoff is not None  # guaranteed by the 400 guard above
+        topic_stmt = delete(Topic).where(Topic.last_seen_at < cutoff)
+        topic_result = await session.execute(topic_stmt)
+        topics_deleted = int(topic_result.rowcount or 0)  # type: ignore[attr-defined]
+        # topic_sources rows are removed via ON DELETE CASCADE on the FK; we
+        # don't report a separate count here (the cascade is opaque to us).
+
+    await session.commit()
+
+    return TopicCleanupResponse(
+        topic_sources_deleted=sources_deleted,
+        topics_deleted=topics_deleted,
+        source_name=body.source_name,
+        older_than_days=body.older_than_days,
+    )
+
+
+@router.post("/topics/cleanup-orphans", response_model=TopicCleanupResponse)
+async def cleanup_orphan_topics(
+    session: AsyncSession = Depends(get_session),
+) -> TopicCleanupResponse:
+    """Delete topics that have zero associated ``topic_sources`` rows.
+
+    Orphans shouldn't normally exist (the FK has ON DELETE CASCADE), but they
+    can appear if rows were inserted manually, if a previous cleanup raced
+    with an ingest, or after a partial restore. Safe to run any time — it is
+    a no-op when there are no orphans.
+    """
+    orphan_subq = (
+        select(Topic.id)
+        .outerjoin(TopicSource, TopicSource.topic_id == Topic.id)
+        .group_by(Topic.id)
+        .having(func.count(TopicSource.id) == 0)
+    )
+    result = await session.execute(delete(Topic).where(Topic.id.in_(orphan_subq)))
+    topics_deleted = int(result.rowcount or 0)  # type: ignore[attr-defined]
+    await session.commit()
+
+    return TopicCleanupResponse(
+        topic_sources_deleted=0,
+        topics_deleted=topics_deleted,
+        source_name=None,
+        older_than_days=None,
+    )
 
 
 __all__ = ["router"]
