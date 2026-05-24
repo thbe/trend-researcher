@@ -52,10 +52,16 @@ async def _build_pipeline(session_factory):
         risk_criteria = None
         request_timeout_seconds = 120
 
-    # Determine provider from base_url
-    if "anthropic" in (base_url or ""):
+    # Determine provider from base_url. Detection order matters:
+    #   1. Anthropic — hosted only, identified by domain.
+    #   2. OpenAI-compatible — any endpoint exposing the `/v1` path. Covers oMLX
+    #      (http://127.0.0.1:8000/v1, the macOS default), LM Studio, vLLM,
+    #      llama.cpp server, and hosted OpenAI itself.
+    #   3. Ollama — default fallback (uses /api/chat, not /v1).
+    base_url_lc = (base_url or "").lower()
+    if "anthropic" in base_url_lc:
         llm = AnthropicAdapter(api_key=api_token or "", default_model=model)
-    elif "openai" in (base_url or "") or (api_token and "anthropic" not in (base_url or "")):
+    elif "/v1" in base_url_lc or "openai" in base_url_lc:
         llm = OpenAIAdapter(base_url=base_url, api_key=api_token or "no-key", default_model=model)
     else:
         llm = OllamaAdapter(

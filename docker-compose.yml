@@ -68,6 +68,12 @@ services:
     stop_grace_period: 30s
     restart: unless-stopped
 
+  # Ollama is the default local LLM backend. On macOS, oMLX (https://omlx.ai/)
+  # runs natively at http://127.0.0.1:8000/v1 (OpenAI-compatible) and is much
+  # faster on Apple Silicon — skip this container by either using the helper
+  # `scripts/dev-up.sh` (auto-detects the host) or listing services explicitly:
+  #   macOS:  docker compose up postgres api crawler   # no ollama
+  #   Linux:  docker compose up                        # ollama starts
   ollama:
     image: ollama/ollama
     container_name: trend-ollama

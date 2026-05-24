@@ -114,10 +114,20 @@ npm run dev
 ### Using Docker Compose
 
 ```bash
-docker compose up
+# Cross-platform helper — auto-detects the host OS and picks the right LLM backend:
+scripts/dev-up.sh
+
+# Or directly:
+docker compose up                              # Linux et al.: full stack incl. Ollama
+docker compose up postgres api crawler         # macOS: skip Ollama, use oMLX on host
 ```
 
-This starts PostgreSQL, the API (port 4000 -> 8000 with the SPA), an Ollama container for local LLM inference, and runs a one-shot crawl.
+This starts PostgreSQL, the API (port 4000 -> 8000 with the SPA), and runs a one-shot crawl.
+
+**LLM backend defaults:**
+- **Default (Linux / non-macOS)** — the bundled `ollama/ollama` container at `http://ollama:11434` (`qwen3.5:latest`). No extra setup.
+- **macOS** — `scripts/dev-up.sh` skips the Ollama container; the assessor expects [oMLX](https://omlx.ai/) running natively on the host at `http://127.0.0.1:8000/v1` (OpenAI-compatible, Apple Silicon). Install oMLX, start it, then point the assessor at it by setting `base_url=http://127.0.0.1:8000/v1` via `PUT /api/ai-config` (UI: AI Config page). Provider is auto-detected from `base_url` (`/v1` → OpenAI-compatible).
+- Anthropic / hosted OpenAI are also supported from the same AI Config page — no code changes needed.
 
 ## API Endpoints
 

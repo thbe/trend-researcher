@@ -294,7 +294,11 @@ class AIConfig(Base):
     """Singleton row holding the AI/LLM connection settings.
 
     Only one row (key='default') is expected. The UI reads/writes this row
-    to configure which Ollama (or compatible) endpoint is used for assessment.
+    to configure which LLM endpoint is used for assessment. The default
+    targets the bundled Ollama container; macOS operators typically switch
+    `base_url` to oMLX (https://omlx.ai/) at `http://127.0.0.1:8000/v1` for a
+    much faster native backend. Anthropic / hosted OpenAI are also supported —
+    the provider is auto-detected from `base_url` (see routes/assessment.py).
     """
 
     __tablename__ = "ai_config"

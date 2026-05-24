@@ -24,10 +24,17 @@ class Settings(BaseSettings):
     auth_session_ttl_hours: int = 24
 
     # AI Assessment (Phase 6)
-    llm_provider: str = "anthropic"  # "anthropic" | "ollama"
-    llm_model: str = "claude-sonnet-4-20250514"
-    llm_api_key: str = ""  # required for anthropic; unused for ollama
-    llm_base_url: str = "http://localhost:11434"  # ollama base URL
+    # Default backend is the bundled Ollama container (`http://ollama:11434`),
+    # which works on every host the Compose stack runs on. macOS operators
+    # typically override these via the `ai_config` DB row to point at oMLX
+    # (https://omlx.ai/), a much faster macOS-native OpenAI-compatible server
+    # at http://127.0.0.1:8000/v1. Provider is auto-detected from `base_url`
+    # in routes/assessment.py (`/v1` → OpenAI-compatible, `anthropic` → Claude,
+    # otherwise Ollama).
+    llm_provider: str = "ollama"  # "ollama" | "openai" (oMLX / LM Studio / vLLM) | "anthropic"
+    llm_model: str = "qwen3.5:latest"
+    llm_api_key: str = ""  # required for anthropic / hosted OpenAI; unused for local Ollama / oMLX
+    llm_base_url: str = "http://ollama:11434"  # bundled Ollama service name on the Compose network
     assessment_prompt_version: str = "v1"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
