@@ -1,82 +1,171 @@
-"""AI Configuration endpoints — GET/PUT singleton settings + model list."""
+"""AI Configuration endpoints — per-department GET/PUT + model list (Phase 10).
+
+Migration 0017 reshaped ``ai_config`` so each row is keyed on
+``department_id`` (one row per dept). These routes use the
+``X-Active-Department`` header (via :func:`get_active_department`) to pick
+which row to read/write. ``GET`` returns 404 with a hint if the active
+department has not yet been initialised — the SPA should then call ``PUT``
+to create it.
+
+Role matrix:
+- ``GET /ai-config``         — viewer+ (any member of the active dept)
+- ``GET /ai-config/models``  — viewer+ (read-only probe)
+- ``PUT /ai-config``         — dept_lead+ (upserts the active dept's row)
+"""
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.dependencies import get_session
+from api.dependencies import (
+    ActiveDepartment,
+    get_active_department,
+    get_session,
+    require_role,
+)
 from api.schemas import AIConfigResponse, AIConfigUpdateRequest
 from core.models import AIConfig
 
 router = APIRouter(tags=["ai-config"])
 
 
-@router.get("/ai-config", response_model=AIConfigResponse)
+@router.get(
+    "/ai-config",
+    response_model=AIConfigResponse,
+    dependencies=[Depends(require_role("viewer", "analyst", "dept_lead"))],
+)
 async def get_ai_config(
+    ad: ActiveDepartment = Depends(get_active_department),
     session: AsyncSession = Depends(get_session),
 ) -> AIConfigResponse:
-    """Return the current AI configuration."""
-    result = await session.execute(select(AIConfig).where(AIConfig.key == "default"))
+    """Return the AI configuration for the active department."""
+    result = await session.execute(
+        select(AIConfig).where(AIConfig.department_id == ad.department.id)
+    )
     row = result.scalar_one_or_none()
     if row is None:
-        raise HTTPException(status_code=404, detail="AI config not initialized")
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"AI config not initialised for department "
+                f"{ad.department.slug!r}; create one via PUT /api/ai-config"
+            ),
+        )
     return AIConfigResponse.model_validate(row)
 
 
-@router.put("/ai-config", response_model=AIConfigResponse)
+@router.put(
+    "/ai-config",
+    response_model=AIConfigResponse,
+    dependencies=[Depends(require_role("dept_lead"))],
+)
 async def update_ai_config(
     body: AIConfigUpdateRequest,
+    ad: ActiveDepartment = Depends(get_active_department),
     session: AsyncSession = Depends(get_session),
 ) -> AIConfigResponse:
-    """Update the AI configuration."""
-    values: dict = {"updated_at": datetime.now(timezone.utc)}
-    if body.base_url is not None:
-        values["base_url"] = body.base_url
-    if body.model is not None:
-        values["model"] = body.model
-    if body.api_token is not None:
-        values["api_token"] = body.api_token if body.api_token != "" else None
-    if body.business_context is not None:
-        values["business_context"] = body.business_context if body.business_context != "" else None
-    if body.opportunity_criteria is not None:
-        values["opportunity_criteria"] = body.opportunity_criteria if body.opportunity_criteria != "" else None
-    if body.risk_criteria is not None:
-        values["risk_criteria"] = body.risk_criteria if body.risk_criteria != "" else None
-    if body.thinking_effort is not None:
-        values["thinking_effort"] = body.thinking_effort
-    if body.request_timeout_seconds is not None:
-        values["request_timeout_seconds"] = body.request_timeout_seconds
+    """Upsert the AI configuration for the active department.
 
-    if len(values) == 1:
+    If a row already exists, it is updated in place. If not, a new row is
+    inserted using the request body plus defaults from the ORM model for any
+    field the caller omitted.
+    """
+
+    dept_id = ad.department.id
+    existing = await session.get(AIConfig, dept_id)
+
+    if existing is None:
+        # Insert path — instantiate with whatever the caller provided; ORM
+        # defaults cover anything they omit.
+        row = AIConfig(department_id=dept_id)
+        for field in (
+            "base_url",
+            "model",
+            "api_token",
+            "business_context",
+            "opportunity_criteria",
+            "risk_criteria",
+            "thinking_effort",
+            "request_timeout_seconds",
+        ):
+            val = getattr(body, field, None)
+            if val is None:
+                continue
+            # Coerce empty strings to NULL on the nullable text columns.
+            if field in {
+                "api_token",
+                "business_context",
+                "opportunity_criteria",
+                "risk_criteria",
+            } and val == "":
+                val = None
+            setattr(row, field, val)
+        session.add(row)
+        await session.commit()
+        await session.refresh(row)
+        return AIConfigResponse.model_validate(row)
+
+    # Update path
+    touched = False
+    if body.base_url is not None:
+        existing.base_url = body.base_url
+        touched = True
+    if body.model is not None:
+        existing.model = body.model
+        touched = True
+    if body.api_token is not None:
+        existing.api_token = body.api_token if body.api_token != "" else None
+        touched = True
+    if body.business_context is not None:
+        existing.business_context = body.business_context if body.business_context != "" else None
+        touched = True
+    if body.opportunity_criteria is not None:
+        existing.opportunity_criteria = body.opportunity_criteria if body.opportunity_criteria != "" else None
+        touched = True
+    if body.risk_criteria is not None:
+        existing.risk_criteria = body.risk_criteria if body.risk_criteria != "" else None
+        touched = True
+    if body.thinking_effort is not None:
+        existing.thinking_effort = body.thinking_effort
+        touched = True
+    if body.request_timeout_seconds is not None:
+        existing.request_timeout_seconds = body.request_timeout_seconds
+        touched = True
+
+    if not touched:
         raise HTTPException(status_code=400, detail="No fields to update")
 
-    stmt = (
-        update(AIConfig)
-        .where(AIConfig.key == "default")
-        .values(**values)
-        .returning(AIConfig)
-    )
-    result = (await session.execute(stmt)).first()
-    if result is None:
-        raise HTTPException(status_code=404, detail="AI config not initialized")
+    existing.updated_at = datetime.now(timezone.utc)
     await session.commit()
-    return AIConfigResponse.model_validate(result[0])
+    await session.refresh(existing)
+    return AIConfigResponse.model_validate(existing)
 
 
-@router.get("/ai-config/models")
+@router.get(
+    "/ai-config/models",
+    dependencies=[Depends(require_role("viewer", "analyst", "dept_lead"))],
+)
 async def list_available_models(
+    ad: ActiveDepartment = Depends(get_active_department),
     session: AsyncSession = Depends(get_session),
 ) -> list[dict]:
-    """Query the configured LLM provider for available models."""
-    # Read current config to get the base_url
-    result = await session.execute(select(AIConfig).where(AIConfig.key == "default"))
+    """Query the LLM provider configured for the active department."""
+    result = await session.execute(
+        select(AIConfig).where(AIConfig.department_id == ad.department.id)
+    )
     row = result.scalar_one_or_none()
     if row is None:
-        raise HTTPException(status_code=404, detail="AI config not initialized")
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"AI config not initialised for department "
+                f"{ad.department.slug!r}; create one via PUT /api/ai-config"
+            ),
+        )
 
     base_url = row.base_url.rstrip("/")
     try:

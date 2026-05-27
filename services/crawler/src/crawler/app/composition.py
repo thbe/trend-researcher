@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core import CrawlConfig, get_engine, get_sessionmaker, get_settings
+from core import CrawlConfig, DepartmentSource, get_engine, get_sessionmaker, get_settings
 
 from crawler.adapters.persistence.sqlalchemy_crawl_run_repository import (
     SqlAlchemyCrawlRunRepository,
@@ -132,22 +132,54 @@ def build_repository() -> tuple[
 async def build_sources_from_db(
     session_factory,
 ) -> list[SourcePort]:
-    """Build sources from the ``crawl_config`` table (Phase 5).
+    """Build sources from `crawl_config` ∩ `department_sources` (Plan 10-02).
 
-    Each returned source carries a ``configured_top_n`` attribute so the
-    orchestrator can use per-source limits. Sources with ``enabled=False``
-    are excluded.
+    The set of source NAMES that get crawled is the **union of all
+    department subscriptions** (any dept with ``enabled=true`` for a
+    source name causes that source to be included). The per-source
+    technical settings (``top_n``, ``capture_summary``, ``verify_ssl``,
+    ``feed_url``) still come from ``crawl_config`` — that table is the
+    single source of truth for *how* to fetch each source; the
+    ``department_sources`` table answers *whether* to fetch it.
 
-    Falls back to :func:`build_sources` if the table is empty or on error
-    (graceful degradation for fresh installs before migration 0007 runs).
+    Effective resolution:
+
+    1. Read every ``crawl_config`` row (technical config).
+    2. Read distinct ``source_name`` from ``department_sources`` where
+       ``enabled = true`` (union over all depts).
+    3. Build sources for the intersection. Emit INFO log
+       ``crawl_sources.selected_via_department_sources_union``.
+
+    Defensive fallback:
+
+    - If **step 2 yields the empty set** (no department has subscribed
+      to any source — possible if every dept_lead toggled everything
+      off, or in a fresh post-migration DB where Default has nothing
+      enabled), log WARNING
+      ``crawl_sources.no_department_subscriptions_falling_back`` and
+      build sources for **every** ``crawl_config`` row instead of
+      bricking the cron.
+    - If the whole DB read errors (fresh install, pre-migration), fall
+      back to :func:`build_sources` (hardcoded list) as before.
+    - If ``crawl_config`` itself is empty, fall back to :func:`build_sources`.
+
+    Carries ARC-001: this function never reads any per-department config
+    beyond the boolean ``enabled`` flag — no prompts, no criteria, no AI.
     """
     try:
         async with session_factory() as session:
-            rows = (
-                await session.execute(
-                    select(CrawlConfig).where(CrawlConfig.enabled.is_(True))
-                )
+            cfg_rows = (
+                await session.execute(select(CrawlConfig))
             ).scalars().all()
+            sub_names = set(
+                (
+                    await session.execute(
+                        select(DepartmentSource.source_name)
+                        .where(DepartmentSource.enabled.is_(True))
+                        .distinct()
+                    )
+                ).scalars().all()
+            )
     except Exception as exc:  # noqa: BLE001
         _log.warning(
             "crawl_config.read_failed_fallback_hardcoded",
@@ -155,12 +187,27 @@ async def build_sources_from_db(
         )
         return build_sources()
 
-    if not rows:
+    if not cfg_rows:
         _log.info("crawl_config.empty_fallback_hardcoded")
         return build_sources()
 
+    fallback_used = False
+    if not sub_names:
+        # No department has subscribed to anything — don't brick the
+        # cron. Crawl every known source so operators still get data
+        # while they fix the subscription state.
+        fallback_used = True
+        sub_names = {cfg.source_name for cfg in cfg_rows}
+        _log.warning(
+            "crawl_sources.no_department_subscriptions_falling_back",
+            fallback_count=len(sub_names),
+            fallback_names=sorted(sub_names),
+        )
+
     sources: list[SourcePort] = []
-    for cfg in rows:
+    for cfg in cfg_rows:
+        if cfg.source_name not in sub_names:
+            continue
         if cfg.source_name == "hackernews":
             src: SourcePort = HackerNewsSource(verify_ssl=cfg.verify_ssl)
         elif cfg.feed_url:
@@ -180,11 +227,18 @@ async def build_sources_from_db(
         src.configured_top_n = cfg.top_n  # type: ignore[attr-defined]
         sources.append(src)
 
-    _log.info(
-        "crawl_config.sources_built",
-        count=len(sources),
-        names=[s.name for s in sources],
-    )
+    if not fallback_used:
+        _log.info(
+            "crawl_sources.selected_via_department_sources_union",
+            count=len(sources),
+            names=[s.name for s in sources],
+        )
+    else:
+        _log.info(
+            "crawl_sources.built_from_fallback",
+            count=len(sources),
+            names=[s.name for s in sources],
+        )
     return sources
 
 

@@ -170,12 +170,16 @@ class TopicDetailResponse(BaseModel):
 
 
 class CrawlConfigResponse(BaseModel):
-    """One row from ``crawl_config``."""
+    """One row from ``crawl_config`` (tech config only — global per source).
+
+    Phase 10 (MT-006): the ``enabled`` flag moved to ``department_sources``;
+    crawl_config carries only tech tuning knobs that apply uniformly to a
+    source regardless of which dept subscribes to it.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
     source_name: str
-    enabled: bool
     top_n: int
     capture_summary: bool
     verify_ssl: bool
@@ -184,9 +188,8 @@ class CrawlConfigResponse(BaseModel):
 
 
 class CrawlConfigUpdateRequest(BaseModel):
-    """Mutable fields the operator can change via the UI."""
+    """Mutable tech fields the (super)admin can change via the UI."""
 
-    enabled: bool | None = None
     top_n: int | None = Field(None, ge=1, le=500)
     capture_summary: bool | None = None
     verify_ssl: bool | None = None
@@ -194,10 +197,9 @@ class CrawlConfigUpdateRequest(BaseModel):
 
 
 class CrawlConfigCreateRequest(BaseModel):
-    """Create a new crawl source."""
+    """Create a new crawl source (tech config only)."""
 
     source_name: str = Field(..., min_length=1, max_length=100)
-    enabled: bool = True
     top_n: int = Field(100, ge=1, le=500)
     capture_summary: bool = True
     verify_ssl: bool = True
@@ -359,6 +361,42 @@ class LoginResponse(BaseModel):
     departments: list[LoginDepartment]
 
 
+# ---------------------------------------------------------------------------
+# Phase 10 (MT-006): Department-source subscriptions
+# ---------------------------------------------------------------------------
+
+
+class DepartmentSourceResponse(BaseModel):
+    """One known crawl source joined with the active dept's subscription flag.
+
+    ``enabled`` reflects this department's subscription (``false`` if there
+    is no row in ``department_sources`` for the active dept). The other
+    fields mirror ``crawl_config`` so the UI can render a single list.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    source_name: str
+    enabled: bool
+    top_n: int
+    capture_summary: bool
+    verify_ssl: bool
+    feed_url: str | None
+
+
+class DepartmentSourcesListResponse(BaseModel):
+    """Wrapper for ``GET /api/department-sources``."""
+
+    sources: list[DepartmentSourceResponse]
+    total: int
+
+
+class DepartmentSourceUpdateRequest(BaseModel):
+    """Toggle the active dept's subscription to one source."""
+
+    enabled: bool
+
+
 __all__ = [
     "CrawlConfigResponse",
     "AIConfigResponse",
@@ -367,6 +405,9 @@ __all__ = [
     "CrawlConfigUpdateRequest",
     "DepartmentCreate",
     "DepartmentResponse",
+    "DepartmentSourceResponse",
+    "DepartmentSourceUpdateRequest",
+    "DepartmentSourcesListResponse",
     "DepartmentUpdate",
     "DepartmentsListResponse",
     "HealthzResponse",

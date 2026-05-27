@@ -1,10 +1,14 @@
-"""Assessment API route — trigger AI assessment from the UI.
+"""Assessment API routes — per-department AI assessment surface (Phase 10).
 
-POST /api/assess         — start background batch assessment job
-POST /api/assess/{id}    — assess a single topic by ID (synchronous)
-GET  /api/assess/jobs    — list recent jobs
-GET  /api/assess/jobs/{id} — get job status/progress
-GET  /api/business-cases — list all business cases
+POST /api/assess              — start background batch assessment job (analyst+)
+POST /api/assess/{topic_id}   — assess one topic synchronously (analyst+)
+GET  /api/assess/jobs         — list recent jobs for active dept (viewer+)
+GET  /api/assess/jobs/{id}    — get job status/progress for active dept (viewer+)
+GET  /api/business-cases      — list BCs owned by active dept (viewer+)
+
+All writes set ``department_id = active_dept.id``; all reads filter by it.
+The background ``_run_job`` worker has no request context, so it carries the
+dept id explicitly as an argument and reads its own AIConfig keyed on that id.
 """
 
 from __future__ import annotations
@@ -12,24 +16,37 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, text, update
 
-from core import get_engine, get_sessionmaker, get_settings
-from core.models import AIConfig, AssessmentJob
+from api.dependencies import (
+    ActiveDepartment,
+    get_active_department,
+    require_role,
+)
 from assessor.adapters.anthropic_adapter import AnthropicAdapter
 from assessor.adapters.ollama_adapter import OllamaAdapter
 from assessor.adapters.openai_adapter import OpenAIAdapter
 from assessor.adapters.postgres_rag import PostgresRAGAdapter
 from assessor.domain.pipeline import AssessmentPipeline
+from core import get_engine, get_sessionmaker, get_settings
+from core.models import AIConfig, AssessmentJob
 
 router = APIRouter()
 
 
-async def _build_pipeline(session_factory):
-    """Build pipeline using AI config from DB."""
+async def _build_pipeline(session_factory, department_id: str):
+    """Build pipeline using AI config for the given department.
+
+    Falls back to env-derived defaults (``llm_base_url``/``llm_model``/...) if
+    the dept has not initialised its ``ai_config`` row yet — keeps the
+    background worker robust if the operator triggers a job before saving
+    config in the UI.
+    """
     async with session_factory() as session:
-        result = await session.execute(select(AIConfig).where(AIConfig.key == "default"))
+        result = await session.execute(
+            select(AIConfig).where(AIConfig.department_id == department_id)
+        )
         ai_config = result.scalar_one_or_none()
 
     if ai_config:
@@ -52,11 +69,10 @@ async def _build_pipeline(session_factory):
         risk_criteria = None
         request_timeout_seconds = 120
 
-    # Determine provider from base_url. Detection order matters:
+    # Provider detection order:
     #   1. Anthropic — hosted only, identified by domain.
-    #   2. OpenAI-compatible — any endpoint exposing the `/v1` path. Covers oMLX
-    #      (http://127.0.0.1:8000/v1, the macOS default), LM Studio, vLLM,
-    #      llama.cpp server, and hosted OpenAI itself.
+    #   2. OpenAI-compatible — any endpoint exposing `/v1`. Covers oMLX, LM
+    #      Studio, vLLM, llama.cpp server, and hosted OpenAI itself.
     #   3. Ollama — default fallback (uses /api/chat, not /v1).
     base_url_lc = (base_url or "").lower()
     if "anthropic" in base_url_lc:
@@ -73,16 +89,20 @@ async def _build_pipeline(session_factory):
 
     rag = PostgresRAGAdapter(session_factory)
     pipeline = AssessmentPipeline(
-        llm=llm, rag=rag, session_factory=session_factory,
-        model_id=model, business_context=business_context,
+        llm=llm,
+        rag=rag,
+        session_factory=session_factory,
+        department_id=department_id,
+        model_id=model,
+        business_context=business_context,
         opportunity_criteria=opportunity_criteria,
         risk_criteria=risk_criteria,
     )
     return pipeline
 
 
-async def _run_job(job_id: str):
-    """Background coroutine that processes assessment job."""
+async def _run_job(job_id: str, department_id: str):
+    """Background coroutine that processes an assessment job for one dept."""
     settings = get_settings()
     engine = get_engine(settings.database_url)
     session_factory = get_sessionmaker(engine)
@@ -97,9 +117,9 @@ async def _run_job(job_id: str):
             )
             await session.commit()
 
-        pipeline = await _build_pipeline(session_factory)
+        pipeline = await _build_pipeline(session_factory, department_id)
 
-        # Get unassessed topics
+        # Get target row to read total
         async with session_factory() as session:
             result = await session.execute(
                 select(AssessmentJob).where(AssessmentJob.id == job_id)
@@ -107,9 +127,11 @@ async def _run_job(job_id: str):
             job = result.scalar_one()
             total = job.total_topics
 
-        topic_ids = await pipeline._rag.get_unassessed_topic_ids(limit=total)
+        topic_ids = await pipeline._rag.get_unassessed_topic_ids(
+            limit=total, department_id=department_id
+        )
 
-        # Update total in case fewer unassessed exist
+        # Update total in case fewer unassessed exist for this dept
         actual_total = len(topic_ids)
         async with session_factory() as session:
             await session.execute(
@@ -133,8 +155,7 @@ async def _run_job(job_id: str):
                 await session.commit()
             return
 
-        # Process topics one by one, updating progress
-        results = []
+        results: list[dict] = []
         completed = 0
         failed = 0
 
@@ -156,7 +177,6 @@ async def _run_job(job_id: str):
                     "prompt_version": "v1",
                 })
 
-            # Update progress after each topic
             async with session_factory() as session:
                 await session.execute(
                     update(AssessmentJob)
@@ -165,7 +185,6 @@ async def _run_job(job_id: str):
                 )
                 await session.commit()
 
-        # Mark completed
         relevant = sum(1 for r in results if r.get("relevance_verdict") == "relevant")
         async with session_factory() as session:
             await session.execute(
@@ -180,7 +199,6 @@ async def _run_job(job_id: str):
             await session.commit()
 
     except Exception as exc:
-        # Mark failed
         async with session_factory() as session:
             await session.execute(
                 update(AssessmentJob)
@@ -196,37 +214,55 @@ async def _run_job(job_id: str):
         await engine.dispose()
 
 
-@router.post("/assess")
-async def assess_batch(limit: int = 20):
-    """Start a background assessment job for unassessed topics."""
+@router.post(
+    "/assess",
+    dependencies=[Depends(require_role("analyst", "dept_lead"))],
+)
+async def assess_batch(
+    limit: int = 20,
+    ad: ActiveDepartment = Depends(get_active_department),
+):
+    """Start a background assessment job for unassessed topics in the active dept."""
     settings = get_settings()
     engine = get_engine(settings.database_url)
     session_factory = get_sessionmaker(engine)
+    dept_id = str(ad.department.id)
     try:
-        # Create job record
         async with session_factory() as session:
             result = await session.execute(
                 text("""
-                    INSERT INTO assessment_jobs (total_topics, state)
-                    VALUES (:total, 'pending')
+                    INSERT INTO assessment_jobs (department_id, total_topics, state)
+                    VALUES (:dept_id, :total, 'pending')
                     RETURNING id
                 """),
-                {"total": limit},
+                {"dept_id": dept_id, "total": limit},
             )
             job_id = result.scalar_one()
             await session.commit()
 
-        # Fire and forget the background task
-        asyncio.create_task(_run_job(job_id))
+        # Fire and forget the background task — carries dept_id explicitly
+        # since the worker has no request context.
+        asyncio.create_task(_run_job(str(job_id), dept_id))
 
-        return {"job_id": job_id, "state": "pending", "total_topics": limit}
+        return {
+            "job_id": job_id,
+            "state": "pending",
+            "total_topics": limit,
+            "department_id": dept_id,
+        }
     finally:
         await engine.dispose()
 
 
-@router.get("/assess/jobs")
-async def list_jobs(limit: int = 10):
-    """List recent assessment jobs."""
+@router.get(
+    "/assess/jobs",
+    dependencies=[Depends(require_role("viewer", "analyst", "dept_lead"))],
+)
+async def list_jobs(
+    limit: int = 10,
+    ad: ActiveDepartment = Depends(get_active_department),
+):
+    """List recent assessment jobs owned by the active department."""
     settings = get_settings()
     engine = get_engine(settings.database_url)
     session_factory = get_sessionmaker(engine)
@@ -237,10 +273,11 @@ async def list_jobs(limit: int = 10):
                     SELECT id, state, total_topics, completed_topics, failed_topics,
                            error, created_at, started_at, finished_at
                     FROM assessment_jobs
+                    WHERE department_id = :dept_id
                     ORDER BY created_at DESC
                     LIMIT :limit
                 """),
-                {"limit": limit},
+                {"limit": limit, "dept_id": str(ad.department.id)},
             )
             rows = result.all()
             return [
@@ -261,9 +298,15 @@ async def list_jobs(limit: int = 10):
         await engine.dispose()
 
 
-@router.get("/assess/jobs/{job_id}")
-async def get_job(job_id: str):
-    """Get status/progress of a specific job."""
+@router.get(
+    "/assess/jobs/{job_id}",
+    dependencies=[Depends(require_role("viewer", "analyst", "dept_lead"))],
+)
+async def get_job(
+    job_id: str,
+    ad: ActiveDepartment = Depends(get_active_department),
+):
+    """Get status/progress of a specific job (must belong to the active dept)."""
     settings = get_settings()
     engine = get_engine(settings.database_url)
     session_factory = get_sessionmaker(engine)
@@ -273,7 +316,8 @@ async def get_job(job_id: str):
                 select(AssessmentJob).where(AssessmentJob.id == job_id)
             )
             job = result.scalar_one_or_none()
-            if not job:
+            if not job or str(job.department_id) != str(ad.department.id):
+                # 404 — never reveal cross-dept job existence.
                 raise HTTPException(status_code=404, detail="Job not found")
             return {
                 "id": job.id,
@@ -291,38 +335,64 @@ async def get_job(job_id: str):
         await engine.dispose()
 
 
-@router.post("/assess/{topic_id}")
-async def assess_single(topic_id: str):
-    """Assess a single topic for retail relevance (synchronous)."""
+@router.post(
+    "/assess/{topic_id}",
+    dependencies=[Depends(require_role("analyst", "dept_lead"))],
+)
+async def assess_single(
+    topic_id: str,
+    ad: ActiveDepartment = Depends(get_active_department),
+):
+    """Assess a single topic synchronously for the active dept."""
     settings = get_settings()
     engine = get_engine(settings.database_url)
     session_factory = get_sessionmaker(engine)
     try:
-        pipeline = await _build_pipeline(session_factory)
+        pipeline = await _build_pipeline(session_factory, str(ad.department.id))
         result = await pipeline.assess_topic(topic_id)
         if result is None:
             raise HTTPException(status_code=404, detail="Topic not found")
         return result
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"LLM provider error: {type(e).__name__}: {e}")
     finally:
         await engine.dispose()
 
 
-@router.get("/business-cases")
-async def list_business_cases(limit: int = 50, offset: int = 0, category: str | None = None):
-    """List all business cases with topic titles. Optionally filter by category."""
+@router.get(
+    "/business-cases",
+    dependencies=[Depends(require_role("viewer", "analyst", "dept_lead"))],
+)
+async def list_business_cases(
+    limit: int = 50,
+    offset: int = 0,
+    category: str | None = None,
+    ad: ActiveDepartment = Depends(get_active_department),
+):
+    """List business cases owned by the active department.
+
+    Phase 10 (MT-006): rows are filtered to ``department_id = active_dept``;
+    a dept never sees another dept's assessments. Optional ``category``
+    filter (opportunity/risk/neutral) still works against
+    ``raw_response->'parsed'->>'category'``.
+    """
     settings = get_settings()
     engine = get_engine(settings.database_url)
     session_factory = get_sessionmaker(engine)
     try:
         async with session_factory() as session:
-            where_clause = ""
-            params: dict = {"limit": limit, "offset": offset}
+            params: dict = {
+                "limit": limit,
+                "offset": offset,
+                "dept_id": str(ad.department.id),
+            }
+            extra_where = ""
             if category:
-                where_clause = "WHERE bc.raw_response->'parsed'->>'category' = :category"
+                extra_where = "AND bc.raw_response->'parsed'->>'category' = :category"
                 params["category"] = category
             result = await session.execute(
                 text(f"""
@@ -331,7 +401,8 @@ async def list_business_cases(limit: int = 50, offset: int = 0, category: str | 
                            bc.generated_at
                     FROM business_cases bc
                     JOIN topics t ON t.id = bc.topic_id
-                    {where_clause}
+                    WHERE bc.department_id = :dept_id
+                    {extra_where}
                     ORDER BY bc.generated_at DESC
                     LIMIT :limit OFFSET :offset
                 """),

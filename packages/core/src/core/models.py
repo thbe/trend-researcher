@@ -291,6 +291,36 @@ class Department(Base):
         passive_deletes=True,
     )
 
+    # Phase 10 (MT-006): per-(dept, source) subscription. Crawler unions
+    # the enabled set across all departments to build its effective source
+    # list (see services/crawler/src/crawler/app/orchestrator.py).
+    sources: Mapped[list["DepartmentSource"]] = relationship(
+        back_populates="department",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    # Phase 10 (MT-004): per-dept AI config. One row per department after
+    # migration 0017 reshape (PK is department_id).
+    ai_config: Mapped["AIConfig | None"] = relationship(
+        back_populates="department",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
+
+    # Phase 10 (MT-009): per-dept assessment artefacts.
+    business_cases: Mapped[list["BusinessCase"]] = relationship(
+        back_populates="department",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    assessment_jobs: Mapped[list["AssessmentJob"]] = relationship(
+        back_populates="department",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
 
 class UserDepartment(Base):
     """Join row between :class:`User` and :class:`Department` (Phase 10, MT-002).
@@ -338,18 +368,19 @@ class UserDepartment(Base):
 
 
 class CrawlConfig(Base):
-    """Per-source crawl configuration (Phase 5).
+    """Per-source technical crawl configuration (Phase 5).
 
-    Single source of truth for mutable crawl settings. The crawler reads this
-    table at the start of each run. The UI writes it. Cadence stays env-driven.
+    Holds tuning knobs (``top_n``, ``capture_summary``, ``verify_ssl``,
+    ``feed_url``) that are global per source — *not* per department. Whether
+    a source is actually crawled is determined by the union of
+    :class:`DepartmentSource` rows across all departments (see migration
+    0017 / MT-006). The crawler reads this table at the start of each run
+    for tech config; subscription comes from ``department_sources``.
     """
 
     __tablename__ = "crawl_config"
 
     source_name: Mapped[str] = mapped_column(Text, primary_key=True)
-    enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("true")
-    )
     top_n: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("100")
     )
@@ -367,14 +398,59 @@ class CrawlConfig(Base):
     )
 
 
+class DepartmentSource(Base):
+    """Per-(department, source) subscription (Phase 10, MT-006).
+
+    Composite PK ``(department_id, source_name)``. The ``enabled`` flag
+    drives the crawler's effective source list: the orchestrator queries
+    ``SELECT DISTINCT source_name FROM department_sources WHERE
+    enabled = true`` to get the union across all departments. If every
+    row is disabled (or the table is empty), the orchestrator falls back
+    to all known sources from :class:`CrawlConfig` to avoid bricking the
+    cron — see migration 0017 docstring.
+    """
+
+    __tablename__ = "department_sources"
+    __table_args__ = (
+        Index("ix_department_sources_source_name", "source_name"),
+    )
+
+    department_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("departments.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    source_name: Mapped[str] = mapped_column(Text, primary_key=True)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    created_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+    updated_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    department: Mapped["Department"] = relationship(back_populates="sources")
+
+
 class BusinessCase(Base):
     """One row per AI assessment of a topic (Phase 6).
 
-    Stores the binary retail-relevance verdict and reason from Stage 2.
-    Full business-case fields (importance, investment band, etc.) land in Phase 7.
+    Phase 10 (MT-009) added ``department_id`` so each (topic, dept) pair
+    can carry its own assessment. The composite UNIQUE
+    ``(topic_id, department_id, framework_id, prompt_version, model_used)``
+    is added in 10-03 once ``framework_id`` exists.
     """
 
     __tablename__ = "business_cases"
+    __table_args__ = (
+        Index("ix_business_cases_department_id", "department_id"),
+    )
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False),
@@ -386,6 +462,11 @@ class BusinessCase(Base):
         ForeignKey("topics.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+    department_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("departments.id", ondelete="CASCADE"),
+        nullable=False,
     )
     relevance_verdict: Mapped[str] = mapped_column(Text, nullable=False)
     relevance_reason: Mapped[str] = mapped_column(Text, nullable=False)
@@ -403,21 +484,27 @@ class BusinessCase(Base):
         server_default=text("now()"),
     )
 
+    department: Mapped["Department"] = relationship(
+        back_populates="business_cases"
+    )
+
 
 class AIConfig(Base):
-    """Singleton row holding the AI/LLM connection settings.
+    """Per-department AI/LLM connection settings (Phase 10, MT-004).
 
-    Only one row (key='default') is expected. The UI reads/writes this row
-    to configure which LLM endpoint is used for assessment. The default
-    targets the bundled Ollama container; macOS operators typically switch
-    `base_url` to oMLX (https://omlx.ai/) at `http://127.0.0.1:8000/v1` for a
-    much faster native backend. Anthropic / hosted OpenAI are also supported —
-    the provider is auto-detected from `base_url` (see routes/assessment.py).
+    Migration 0017 reshaped this table: PK is now ``department_id`` (UUID FK
+    to ``departments``) instead of the legacy ``key='default'`` singleton.
+    Each department owns one row. The crawler does NOT read this table —
+    AI runs only in Stage 2 (ARC-001).
     """
 
     __tablename__ = "ai_config"
 
-    key: Mapped[str] = mapped_column(Text, primary_key=True, default="default")
+    department_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("departments.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
     base_url: Mapped[str] = mapped_column(Text, nullable=False, default="http://ollama:11434")
     model: Mapped[str] = mapped_column(Text, nullable=False, default="qwen3.5:latest")
     api_token: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -432,20 +519,30 @@ class AIConfig(Base):
         server_default=text("now()"),
     )
 
+    department: Mapped["Department"] = relationship(back_populates="ai_config")
+
 
 class AssessmentJob(Base):
     """Background assessment job tracking (Phase 7).
 
-    Each row represents one batch assessment run. The background worker
-    updates progress/state as it processes topics.
+    Phase 10 (MT-009) added ``department_id`` so per-dept assessment
+    batches can be tracked independently.
     """
 
     __tablename__ = "assessment_jobs"
+    __table_args__ = (
+        Index("ix_assessment_jobs_department_id", "department_id"),
+    )
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False),
         primary_key=True,
         server_default=text("gen_random_uuid()"),
+    )
+    department_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("departments.id", ondelete="CASCADE"),
+        nullable=False,
     )
     state: Mapped[str] = mapped_column(
         Text, nullable=False, server_default="pending"
@@ -471,5 +568,9 @@ class AssessmentJob(Base):
         TIMESTAMP(timezone=True), nullable=True
     )
 
+    department: Mapped["Department"] = relationship(
+        back_populates="assessment_jobs"
+    )
 
-__all__ = ["AIConfig", "AssessmentJob", "Base", "BusinessCase", "CrawlConfig", "CrawlRun", "Department", "RoleLiteral", "Topic", "TopicSource", "User", "UserDepartment"]
+
+__all__ = ["AIConfig", "AssessmentJob", "Base", "BusinessCase", "CrawlConfig", "CrawlRun", "Department", "DepartmentSource", "RoleLiteral", "Topic", "TopicSource", "User", "UserDepartment"]

@@ -1,4 +1,12 @@
-"""GET /api/dashboard — aggregate counts for the dashboard view."""
+"""GET /api/dashboard — aggregate counts scoped to the active department.
+
+Phase 10 (MT-006/MT-009):
+- ``total_topics`` counts only topics whose source set intersects the active
+  dept's enabled subscriptions in ``department_sources``.
+- BC-derived counts (assessed/opportunities/risks/neutral) are filtered to
+  ``business_cases.department_id = active_dept`` so each dept sees its own
+  assessment landscape.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +15,13 @@ from pydantic import BaseModel
 from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.dependencies import get_session
-from core.models import Topic, BusinessCase
+from api.dependencies import (
+    ActiveDepartment,
+    get_active_department,
+    get_session,
+    require_role,
+)
+from core.models import DepartmentSource, Topic, TopicSource
 
 router = APIRouter()
 
@@ -21,17 +34,38 @@ class DashboardResponse(BaseModel):
     neutral: int
 
 
-@router.get("/dashboard", response_model=DashboardResponse)
+@router.get(
+    "/dashboard",
+    response_model=DashboardResponse,
+    dependencies=[Depends(require_role("viewer", "analyst", "dept_lead"))],
+)
 async def get_dashboard(
+    ad: ActiveDepartment = Depends(get_active_department),
     session: AsyncSession = Depends(get_session),
 ) -> DashboardResponse:
-    """Return aggregate counts for the dashboard."""
+    """Return aggregate counts for the active department."""
 
-    # Total topics
-    total_topics = (await session.execute(select(func.count(Topic.id)))).scalar() or 0
+    dept_id = ad.department.id
 
-    # Count by category from the latest business case per topic
-    # Use a lateral/distinct-on to get only the latest assessment per topic
+    # Total topics visible to this dept: those with at least one TopicSource
+    # row whose source_name is enabled for this dept in department_sources.
+    total_topics_stmt = (
+        select(func.count(func.distinct(Topic.id)))
+        .select_from(Topic)
+        .join(TopicSource, TopicSource.topic_id == Topic.id)
+        .join(
+            DepartmentSource,
+            DepartmentSource.source_name == TopicSource.source_name,
+        )
+        .where(
+            DepartmentSource.department_id == dept_id,
+            DepartmentSource.enabled.is_(True),
+        )
+    )
+    total_topics = (await session.execute(total_topics_stmt)).scalar() or 0
+
+    # Category counts from the latest business case per (topic, dept).
+    # Filtered to BCs owned by the active dept.
     category_counts = (
         await session.execute(
             text("""
@@ -42,10 +76,12 @@ async def get_dashboard(
                     SELECT DISTINCT ON (topic_id)
                         topic_id, raw_response
                     FROM business_cases
+                    WHERE department_id = :dept_id
                     ORDER BY topic_id, generated_at DESC
                 ) latest
                 GROUP BY 1
-            """)
+            """),
+            {"dept_id": dept_id},
         )
     ).all()
 

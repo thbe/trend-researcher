@@ -35,6 +35,12 @@ PROD_IMAGE="${PROD_IMAGE:-trend-api:dev}"
 PROD_PORT="${PROD_PORT:-18000}"
 PROD_NAME="${PROD_NAME:-trend-prod-smoke}"
 
+# Phase 10: /api/topics is per-department. Default dept uuid is seeded by
+# migration 0016 and is stable across environments — pass it on every
+# topic-scoped call so the active-department dependency resolves.
+DEFAULT_DEPT="00000000-0000-0000-0000-000000000001"
+DEPT_HEADER="X-Active-Department: ${DEFAULT_DEPT}"
+
 log() { echo "==> $*"; }
 
 # ----------------------------------------------------------------------------
@@ -73,7 +79,7 @@ echo "    /api/runs length: $runs_len"
 test -n "$runs_len"
 
 log "[7/10] /api/topics?sort=-breadth&limit=5 returns numeric breadth + longevity_seconds"
-topics_json=$(curl -fs "${API_BASE}/api/topics?sort=-breadth&limit=5")
+topics_json=$(curl -fs -H "${DEPT_HEADER}" "${API_BASE}/api/topics?sort=-breadth&limit=5")
 topics_len=$(echo "$topics_json" | jq '.topics | length')
 echo "    /api/topics length: $topics_len"
 if [ "$topics_len" -gt 0 ]; then
@@ -87,14 +93,14 @@ else
 fi
 
 log "[8/10] /api/topics?sort=garbage -> 400 (G5 whitelist)"
-status=$(curl -s -o /dev/null -w '%{http_code}' "${API_BASE}/api/topics?sort=garbage")
+status=$(curl -s -o /dev/null -w '%{http_code}' -H "${DEPT_HEADER}" "${API_BASE}/api/topics?sort=garbage")
 echo "    status: $status"
 test "$status" = "400"
 
 log "[9/10] /api/topics/{id} returns sources + topic_metadata (if any topic exists)"
 if [ "$topics_len" -gt 0 ]; then
   tid=$(echo "$topics_json" | jq -r '.topics[0].id')
-  detail_json=$(curl -fs "${API_BASE}/api/topics/${tid}")
+  detail_json=$(curl -fs -H "${DEPT_HEADER}" "${API_BASE}/api/topics/${tid}")
   echo "$detail_json" | jq -e '.sources | type == "array"' >/dev/null
   echo "$detail_json" | jq -e '.topic_metadata | type == "object"' >/dev/null
   echo "    /api/topics/${tid} has sources + topic_metadata"

@@ -38,18 +38,54 @@ class PostgresRAGAdapter:
 
             return TopicContext(topic=topic, source_summaries=source_summaries)
 
-    async def get_unassessed_topic_ids(self, limit: int = 50) -> list[str]:
-        """Return topic IDs that have no business_cases row yet."""
+    async def get_unassessed_topic_ids(
+        self, limit: int = 50, department_id: str | None = None
+    ) -> list[str]:
+        """Return topic IDs that need a BC for the given department.
+
+        Phase 10 (MT-006): when ``department_id`` is provided, the filter
+        becomes "no business_cases row for THIS dept" — so the same topic can
+        be re-assessed independently for each department. Topics are also
+        restricted to those that have at least one ``topic_sources`` row
+        whose ``source_name`` is enabled in ``department_sources`` for this
+        dept (you don't assess what you don't subscribe to).
+
+        When ``department_id`` is None (legacy callers), the original "no BC
+        at all" semantics are preserved — used by tests/back-compat only.
+        """
         async with self._session_factory() as session:
-            result = await session.execute(
-                text("""
-                    SELECT t.id FROM topics t
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM business_cases bc WHERE bc.topic_id = t.id
-                    )
-                    ORDER BY t.last_seen_at DESC
-                    LIMIT :limit
-                """),
-                {"limit": limit},
-            )
+            if department_id is None:
+                result = await session.execute(
+                    text("""
+                        SELECT t.id FROM topics t
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM business_cases bc WHERE bc.topic_id = t.id
+                        )
+                        ORDER BY t.last_seen_at DESC
+                        LIMIT :limit
+                    """),
+                    {"limit": limit},
+                )
+            else:
+                result = await session.execute(
+                    text("""
+                        SELECT t.id FROM topics t
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM business_cases bc
+                            WHERE bc.topic_id = t.id
+                              AND bc.department_id = :dept_id
+                        )
+                        AND EXISTS (
+                            SELECT 1 FROM topic_sources ts
+                            JOIN department_sources ds
+                              ON ds.source_name = ts.source_name
+                            WHERE ts.topic_id = t.id
+                              AND ds.department_id = :dept_id
+                              AND ds.enabled = true
+                        )
+                        ORDER BY t.last_seen_at DESC
+                        LIMIT :limit
+                    """),
+                    {"limit": limit, "dept_id": department_id},
+                )
             return [row[0] for row in result.all()]

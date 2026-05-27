@@ -33,10 +33,15 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from sqlalchemy import Column, MetaData, Table, delete, select, func, literal_column
+from sqlalchemy import Column, MetaData, Table, and_, delete, exists, select, func, literal_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.dependencies import get_session
+from api.dependencies import (
+    ActiveDepartment,
+    get_active_department,
+    get_session,
+    require_role,
+)
 from api.schemas import (
     TopicCleanupRequest,
     TopicCleanupResponse,
@@ -45,7 +50,7 @@ from api.schemas import (
     TopicSourceResponse,
     TopicsListResponse,
 )
-from core.models import Topic, TopicSource, BusinessCase
+from core.models import BusinessCase, DepartmentSource, Topic, TopicSource
 
 router = APIRouter()
 
@@ -91,23 +96,60 @@ def _parse_sort(sort: str) -> tuple[str, bool]:
     return key, desc
 
 
-@router.get("/topics", response_model=TopicsListResponse)
+@router.get(
+    "/topics",
+    response_model=TopicsListResponse,
+    dependencies=[Depends(require_role("viewer", "analyst", "dept_lead"))],
+)
 async def list_topics(
     sort: str = Query(_DEFAULT_SORT),
     limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    ad: ActiveDepartment = Depends(get_active_department),
     session: AsyncSession = Depends(get_session),
 ) -> TopicsListResponse:
-    """Return up to ``limit`` topics joined with derived stats, sorted per ``sort``."""
+    """Return up to ``limit`` topics joined with derived stats, sorted per ``sort``.
+
+    Per Phase 10 (MT-006/MT-009): topics are filtered to those that have at
+    least one ``topic_sources`` row whose ``source_name`` is enabled for the
+    active department in ``department_sources``. ``relevance_verdict`` comes
+    from the latest ``business_cases`` row scoped to the same department.
+
+    NOTE on ``breadth``: stays a GLOBAL topic property (count of distinct
+    sources observing it across the platform) — it is the "viral index" of
+    the topic itself and is not narrowed to dept subscriptions on purpose.
+    """
 
     key, desc = _parse_sort(sort)
     order_col = _SORT_COLUMNS[key]
     order_expr = order_col.desc() if desc else order_col.asc()
 
-    # Subquery: latest business case verdict per topic
+    dept_id = ad.department.id
+
+    # Dept-scope predicate: this topic has at least one TopicSource whose
+    # source is enabled for the active dept.
+    dept_source_exists = exists(
+        select(1)
+        .select_from(TopicSource)
+        .join(
+            DepartmentSource,
+            DepartmentSource.source_name == TopicSource.source_name,
+        )
+        .where(
+            TopicSource.topic_id == Topic.id,
+            DepartmentSource.department_id == dept_id,
+            DepartmentSource.enabled.is_(True),
+        )
+        .correlate(Topic)
+    )
+
+    # Subquery: latest business case verdict per (topic, active_dept)
     latest_verdict = (
         select(BusinessCase.relevance_verdict)
-        .where(BusinessCase.topic_id == Topic.id)
+        .where(
+            BusinessCase.topic_id == Topic.id,
+            BusinessCase.department_id == dept_id,
+        )
         .order_by(BusinessCase.generated_at.desc())
         .limit(1)
         .correlate(Topic)
@@ -115,7 +157,8 @@ async def list_topics(
         .label("relevance_verdict")
     )
 
-    # Subquery: distinct source names as comma-separated string
+    # Subquery: distinct source names as comma-separated string (global —
+    # shows the full provenance trail of the topic, not narrowed to dept).
     source_names_sub = (
         select(func.string_agg(func.distinct(TopicSource.source_name), literal_column("', '")))
         .where(TopicSource.topic_id == Topic.id)
@@ -143,6 +186,7 @@ async def list_topics(
                 _v_topic_stats.c.topic_id == Topic.id,
             )
         )
+        .where(dept_source_exists)
         .order_by(order_expr, Topic.id)
         .offset(offset)
         .limit(limit)
@@ -150,8 +194,12 @@ async def list_topics(
     result = await session.execute(stmt)
     rows = result.mappings().all()
 
-    # Total count for pagination
-    count_stmt = select(func.count(Topic.id))
+    # Total count for pagination — same dept filter applied.
+    count_stmt = (
+        select(func.count(Topic.id))
+        .select_from(Topic)
+        .where(dept_source_exists)
+    )
     total = (await session.execute(count_stmt)).scalar() or 0
 
     return TopicsListResponse(
@@ -163,12 +211,21 @@ async def list_topics(
     )
 
 
-@router.get("/topics/{topic_id}", response_model=TopicDetailResponse)
+@router.get(
+    "/topics/{topic_id}",
+    response_model=TopicDetailResponse,
+    dependencies=[Depends(require_role("viewer", "analyst", "dept_lead"))],
+)
 async def get_topic(
     topic_id: UUID = Path(...),
+    ad: ActiveDepartment = Depends(get_active_department),
     session: AsyncSession = Depends(get_session),
 ) -> TopicDetailResponse:
     """Return one topic + derived stats + ``topic_metadata`` + nested sources.
+
+    Per Phase 10 (MT-006/MT-009): 404 if the topic has no ``topic_sources``
+    row whose source is enabled for the active dept — a dept must not learn
+    of topics it does not subscribe to even by guessing IDs.
 
     Per CONTEXT G7: ``sources`` ordered ``observed_at DESC`` (most recent
     observation first — matches operator's "what just happened to this topic"
@@ -178,6 +235,23 @@ async def get_topic(
     ``topic_id`` is typed as ``UUID`` so FastAPI auto-rejects malformed input
     with 422 before this handler ever runs (no SQL injection vector).
     """
+
+    dept_id = ad.department.id
+
+    dept_source_exists = exists(
+        select(1)
+        .select_from(TopicSource)
+        .join(
+            DepartmentSource,
+            DepartmentSource.source_name == TopicSource.source_name,
+        )
+        .where(
+            TopicSource.topic_id == Topic.id,
+            DepartmentSource.department_id == dept_id,
+            DepartmentSource.enabled.is_(True),
+        )
+        .correlate(Topic)
+    )
 
     topic_stmt = (
         select(
@@ -197,7 +271,7 @@ async def get_topic(
                 _v_topic_stats.c.topic_id == Topic.id,
             )
         )
-        .where(Topic.id == topic_id)
+        .where(and_(Topic.id == topic_id, dept_source_exists))
     )
     topic_row = (await session.execute(topic_stmt)).mappings().first()
     if topic_row is None:

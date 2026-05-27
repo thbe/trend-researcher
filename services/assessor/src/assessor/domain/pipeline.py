@@ -36,14 +36,23 @@ class AssessmentPipeline:
         llm: LLMPort,
         rag: RAGPort,
         session_factory: async_sessionmaker[AsyncSession],
+        department_id: str,
         model_id: str | None = None,
         business_context: str | None = None,
         opportunity_criteria: str | None = None,
         risk_criteria: str | None = None,
     ) -> None:
+        """Create a pipeline bound to one department.
+
+        Phase 10 (MT-006): ``department_id`` is REQUIRED — every
+        ``business_cases`` row carries it (NOT NULL since migration 0017) so
+        the same topic can be re-assessed independently per dept with
+        different prompts / criteria / framework.
+        """
         self._llm = llm
         self._rag = rag
         self._session_factory = session_factory
+        self._department_id = department_id
         self._model_id = model_id
         self._business_context = business_context or DEFAULT_BUSINESS_CONTEXT
         self._opportunity_criteria = opportunity_criteria or DEFAULT_OPPORTUNITY_CRITERIA
@@ -104,17 +113,20 @@ class AssessmentPipeline:
         reason = parsed.get("reason", "No reason provided")
         model_used = response.get("model", self._model_id or "unknown")
 
-        # Persist to business_cases
+        # Persist to business_cases (scoped to this pipeline's department).
         async with self._session_factory() as session:
             await session.execute(
                 text("""
                     INSERT INTO business_cases
-                        (topic_id, relevance_verdict, relevance_reason, model_used, prompt_version, raw_response)
+                        (topic_id, department_id, relevance_verdict, relevance_reason,
+                         model_used, prompt_version, raw_response)
                     VALUES
-                        (:topic_id, :verdict, :reason, :model_used, :prompt_version, :raw_response)
+                        (:topic_id, :department_id, :verdict, :reason,
+                         :model_used, :prompt_version, :raw_response)
                 """),
                 {
                     "topic_id": topic_id,
+                    "department_id": self._department_id,
                     "verdict": verdict,
                     "reason": reason,
                     "model_used": model_used,

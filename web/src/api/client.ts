@@ -14,9 +14,14 @@ export class ApiError extends Error {
 }
 
 export async function request<T>(path: string): Promise<T> {
-  const response = await fetch(path, {
-    headers: { Accept: 'application/json' },
-  })
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  if (typeof localStorage !== 'undefined') {
+    const activeDept = localStorage.getItem('activeDepartment')
+    if (activeDept) {
+      headers['X-Active-Department'] = activeDept
+    }
+  }
+  const response = await fetch(path, { headers })
 
   if (!response.ok) {
     let detail = `HTTP ${response.status}`

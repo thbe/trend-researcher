@@ -22,7 +22,17 @@ async function handleLogin() {
       error.value = body.detail || `Login failed (${res.status})`
       return
     }
-    router.push({ name: 'topics' })
+    const body = await res.json().catch(() => ({} as any))
+    if (
+      typeof localStorage !== 'undefined' &&
+      !localStorage.getItem('activeDepartment') &&
+      Array.isArray(body?.departments) &&
+      body.departments.length > 0 &&
+      body.departments[0]?.id
+    ) {
+      localStorage.setItem('activeDepartment', body.departments[0].id)
+    }
+    router.push({ name: 'dashboard' })
   } catch (e: any) {
     error.value = e.message || 'Network error'
   } finally {
