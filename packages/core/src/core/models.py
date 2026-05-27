@@ -438,6 +438,69 @@ class DepartmentSource(Base):
     department: Mapped["Department"] = relationship(back_populates="sources")
 
 
+class DepartmentPAT(Base):
+    """Per-department Personal Access Token (Phase 10, plan 10-02 T09).
+
+    Each row is a bearer credential scoped to a single department.
+    Dept_leads (and superadmins) mint these to drive the dept-scoped
+    internal crawl endpoint without sharing the global
+    ``TREND_INTERNAL_PAT`` env secret.
+
+    Storage shape:
+
+    - ``token_hash`` holds the SHA-256 hex of the plaintext bearer; the
+      plaintext is returned to the caller exactly once at creation time
+      and is never persisted.
+    - ``revoked_at`` is a soft-delete tombstone — the auth middleware
+      rejects any token whose row has a non-NULL ``revoked_at``.
+    - Partial unique index on ``token_hash WHERE revoked_at IS NULL``
+      (migration 0018) keeps active-token lookup unambiguous while
+      allowing revoked rows to be retained for audit.
+    """
+
+    __tablename__ = "department_pats"
+    __table_args__ = (
+        Index("ix_department_pats_department_id", "department_id"),
+        Index(
+            "ix_department_pats_token_hash_active",
+            "token_hash",
+            unique=True,
+            postgresql_where=text("revoked_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    department_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("departments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    token_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id"),
+        nullable=False,
+    )
+    created_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+    last_used_at: Mapped[str | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    revoked_at: Mapped[str | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+
+    department: Mapped["Department"] = relationship()
+
+
 class BusinessCase(Base):
     """One row per AI assessment of a topic (Phase 6).
 

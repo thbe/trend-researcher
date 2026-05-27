@@ -397,6 +397,47 @@ class DepartmentSourceUpdateRequest(BaseModel):
     enabled: bool
 
 
+class DepartmentPATCreate(BaseModel):
+    """Body for ``POST /api/departments/{dept_id}/pats``."""
+
+    name: str = Field(..., min_length=1, max_length=200)
+
+
+class DepartmentPATCreateResponse(BaseModel):
+    """Returned ONCE at creation time — contains the plaintext token.
+
+    The plaintext is NEVER persisted (only its SHA-256 hash is stored). If
+    the caller loses it, the only recourse is to revoke and mint a new PAT.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    token: str
+    created_at: datetime
+
+
+class DepartmentPATResponse(BaseModel):
+    """Metadata for a single PAT. Never includes plaintext or hash."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    created_by: str
+    created_at: datetime
+    last_used_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+
+class DepartmentPATsListResponse(BaseModel):
+    """Wrapper for ``GET /api/departments/{dept_id}/pats``."""
+
+    pats: list[DepartmentPATResponse]
+    total: int
+
+
 __all__ = [
     "CrawlConfigResponse",
     "AIConfigResponse",
@@ -404,6 +445,10 @@ __all__ = [
     "CrawlConfigCreateRequest",
     "CrawlConfigUpdateRequest",
     "DepartmentCreate",
+    "DepartmentPATCreate",
+    "DepartmentPATCreateResponse",
+    "DepartmentPATResponse",
+    "DepartmentPATsListResponse",
     "DepartmentResponse",
     "DepartmentSourceResponse",
     "DepartmentSourceUpdateRequest",

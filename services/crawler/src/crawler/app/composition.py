@@ -10,6 +10,7 @@ business logic.
 from __future__ import annotations
 
 import os
+from uuid import UUID
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -131,6 +132,8 @@ def build_repository() -> tuple[
 
 async def build_sources_from_db(
     session_factory,
+    *,
+    department_id: UUID | None = None,
 ) -> list[SourcePort]:
     """Build sources from `crawl_config` ∩ `department_sources` (Plan 10-02).
 
@@ -142,15 +145,26 @@ async def build_sources_from_db(
     single source of truth for *how* to fetch each source; the
     ``department_sources`` table answers *whether* to fetch it.
 
+    Scoping (plan 10-02 T09):
+
+    - ``department_id=None`` (default, used by Cloud Scheduler / UI):
+      union of every department's enabled subscriptions, with the
+      defensive "no subscriptions → crawl every known source" fallback.
+    - ``department_id=<uuid>`` (used by the dept-scoped internal route):
+      filter ``department_sources`` to that single dept. **No fallback
+      expansion** — if that dept has no enabled subscriptions the result
+      is empty and the crawl is a no-op. This is intentional: an explicit
+      per-dept trigger must not silently fan out to other depts' sources.
+
     Effective resolution:
 
     1. Read every ``crawl_config`` row (technical config).
     2. Read distinct ``source_name`` from ``department_sources`` where
-       ``enabled = true`` (union over all depts).
+       ``enabled = true`` (scoped to ``department_id`` if given).
     3. Build sources for the intersection. Emit INFO log
        ``crawl_sources.selected_via_department_sources_union``.
 
-    Defensive fallback:
+    Defensive fallback (only when ``department_id is None``):
 
     - If **step 2 yields the empty set** (no department has subscribed
       to any source — possible if every dept_lead toggled everything
@@ -171,14 +185,17 @@ async def build_sources_from_db(
             cfg_rows = (
                 await session.execute(select(CrawlConfig))
             ).scalars().all()
+            sub_stmt = (
+                select(DepartmentSource.source_name)
+                .where(DepartmentSource.enabled.is_(True))
+                .distinct()
+            )
+            if department_id is not None:
+                sub_stmt = sub_stmt.where(
+                    DepartmentSource.department_id == str(department_id)
+                )
             sub_names = set(
-                (
-                    await session.execute(
-                        select(DepartmentSource.source_name)
-                        .where(DepartmentSource.enabled.is_(True))
-                        .distinct()
-                    )
-                ).scalars().all()
+                (await session.execute(sub_stmt)).scalars().all()
             )
     except Exception as exc:  # noqa: BLE001
         _log.warning(
@@ -193,6 +210,14 @@ async def build_sources_from_db(
 
     fallback_used = False
     if not sub_names:
+        if department_id is not None:
+            # Explicit dept scope with zero subscriptions → no-op crawl,
+            # no fallback expansion (would leak other depts' sources).
+            _log.info(
+                "crawl_sources.dept_scope_empty",
+                department_id=str(department_id),
+            )
+            return []
         # No department has subscribed to anything — don't brick the
         # cron. Crawl every known source so operators still get data
         # while they fix the subscription state.
