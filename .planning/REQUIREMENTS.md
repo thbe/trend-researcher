@@ -97,6 +97,25 @@
 
 ---
 
+## Multi-Tenant Platform (MT-*)
+
+Requirements introduced by **Phase 10 — Multi-Tenant Market Intelligence Platform**.
+These supersede OOS-001 (multi-tenancy) and OOS-005 (multi-market) for the scope
+defined here. Original AI-006 ("single seed market: retail") is preserved as the
+*default* department behaviour but no longer an architectural constraint.
+
+- **MT-001 — Departments as first-class entities.** The system supports N ≥ 1 departments coexisting with isolated per-department configuration (sources subscription, AI config, framework selection, business context). Departments are managed by system superadmins.
+- **MT-002 — Per-(user, department) RBAC.** Users may belong to multiple departments; role is keyed on the `(user, department)` pair. Roles: `viewer` (read), `analyst` (read + assess), `dept_lead` (read + assess + manage dept config + write harmonization Net View). System superadmin is a separate orthogonal boolean flag (`users.is_superadmin`).
+- **MT-003 — Global topics, per-department assessments.** Topics remain a single global deduplicated stream (ARC-001 preserved). All assessment artefacts (business_cases, assessment_jobs) are scoped to a `(department, framework)` pair.
+- **MT-004 — Crawler runs as single global one-shot job.** The crawler continues to run once per cadence; its effective source list is the **union** of all departments' active source subscriptions. `crawl_runs` rows still reflect one global run per invocation.
+- **MT-005 — Pluggable assessment frameworks.** Assessment frameworks are pluggable; v1 seeds `verdict` (current schema preserved verbatim), `swot`, and `pestle`. Each department selects ≥ 1 enabled framework with one marked as default. Same topic can be assessed under multiple frameworks within one department.
+- **MT-006 — Business cases keyed by (topic, department, framework).** `business_cases` rows are uniquely keyed on `(topic_id, department_id, framework_id, prompt_version, model_used)`. Framework-specific structured output lives in a `structured_output` JSONB column; existing denormalised top-level fields (`relevance_verdict`, `relevance_reason`) are populated from the framework's top-level slots for cheap sorting/filtering.
+- **MT-007 — Cross-department harmonization view.** A harmonization view per topic shows side-by-side `business_cases` from every `(department, framework)` pair that assessed it, plus an optional admin-authored Net View free-text annotation persisted in `topic_harmonizations`. Any logged-in user can read; only `dept_lead` (of any dept) or `is_superadmin` can write the Net View.
+- **MT-008 — Lossless default-department migration.** Existing single-tenant production data migrates losslessly into a seeded `Default` department; the existing seed user becomes `is_superadmin = true` and `dept_lead` of Default. All pre-migration `topics`, `business_cases`, `ai_config`, `crawl_config`, `assessment_jobs` remain visible and behaviour is identical to pre-migration until a second department is created.
+- **MT-009 — Ingest stays AI-free under multi-tenancy.** ARC-001 is preserved across the multi-tenant refactor; the crawler's only new dependency on departments is reading the union source-subscription list from `department_sources`. No AI code path exists in the crawler or in any `department_sources` resolution (verified by grep).
+
+---
+
 ## Traceability
 
 | REQ-ID    | Title                                | Phase         | Status   |
@@ -135,9 +154,18 @@
 | OPS-002   | Crawl logs                           | Phase 3       | proposed |
 | OPS-003   | Manual back-pressure / pause         | Phase 3       | proposed |
 | ARC-001   | Hard separation invariant            | Phase 1       | proposed |
-| ARC-002   | Externalization-ready seams          | Phase 9       | proposed |
+| ARC-002   | Externalization-ready seams          | Phase 9       | superseded (folded into Phase 10) |
 | ARC-003   | Source-plugin architecture           | Phase 1       | proposed |
-| ARC-004   | Single-operator footprint            | Phase 9       | proposed |
+| ARC-004   | Single-operator footprint            | Phase 9       | superseded (folded into Phase 10) |
+| MT-001    | Departments as first-class entities  | Phase 10      | proposed |
+| MT-002    | Per-(user, department) RBAC          | Phase 10      | proposed |
+| MT-003    | Global topics, per-dept assessments  | Phase 10      | proposed |
+| MT-004    | Crawler as single global job         | Phase 10      | proposed |
+| MT-005    | Pluggable assessment frameworks      | Phase 10      | proposed |
+| MT-006    | Business cases keyed by (topic, dept, framework) | Phase 10 | proposed |
+| MT-007    | Cross-department harmonization view  | Phase 10      | proposed |
+| MT-008    | Lossless default-department migration | Phase 10     | proposed |
+| MT-009    | Ingest stays AI-free under multi-tenancy | Phase 10  | proposed |
 
 ---
-_Last updated: 2026-05-14 (roadmap-approval revision: AI-002 LLMPort, OOS-010 added, OOS-003 clarified, phases assigned)_
+_Last updated: 2026-05-27 (Phase 10 plan 10-00 — MT-001..MT-009 added; ARC-002/ARC-004 marked superseded; Phase 9 superseded by Phase 10)_

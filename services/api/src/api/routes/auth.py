@@ -11,8 +11,9 @@ from starlette.responses import JSONResponse
 from api.auth import verify_password
 from api.auth.middleware import COOKIE_NAME, create_session_cookie
 from api.dependencies import get_session
+from api.schemas import LoginDepartment, LoginResponse
 from core import get_settings
-from core.models import User
+from core.models import Department, User, UserDepartment
 
 router = APIRouter()
 
@@ -45,7 +46,38 @@ async def login(
         ttl_hours=settings.auth_session_ttl_hours,
     )
 
-    response = JSONResponse({"ok": True, "username": user.username})
+    # Phase 10: include departments + superadmin flag so SPA can populate
+    # the department switcher without a follow-up roundtrip.
+    if user.is_superadmin:
+        # Superadmin sees all departments with a synthesised dept_lead role.
+        dept_rows = (
+            await session.execute(select(Department).order_by(Department.created_at))
+        ).scalars().all()
+        departments = [
+            LoginDepartment(id=d.id, name=d.name, slug=d.slug, role="dept_lead")
+            for d in dept_rows
+        ]
+    else:
+        membership_rows = (
+            await session.execute(
+                select(UserDepartment, Department)
+                .join(Department, Department.id == UserDepartment.department_id)
+                .where(UserDepartment.user_id == user.id)
+                .order_by(Department.created_at)
+            )
+        ).all()
+        departments = [
+            LoginDepartment(id=d.id, name=d.name, slug=d.slug, role=ud.role)
+            for ud, d in membership_rows
+        ]
+
+    payload = LoginResponse(
+        ok=True,
+        username=user.username,
+        is_superadmin=user.is_superadmin,
+        departments=departments,
+    )
+    response = JSONResponse(payload.model_dump(mode="json"))
     response.set_cookie(
         key=COOKIE_NAME,
         value=cookie_value,

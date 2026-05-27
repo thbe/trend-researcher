@@ -30,10 +30,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4.5: Topic Description Capture & URL Resolution** (INSERTED 2026-05-17, completed 2026-05-18) - Recovered description/standfirst from Google News RSS + NYT homepage; in-process CBM decoder for Google News redirect URLs (all 81 prod tokens were modern opaque format → expected fallback path, 47 descriptions backfilled live); `topic_sources.resolved_url` column added (Alembic 0004); SPA renders truncated subtitle + full detail paragraph + resolved-URL source links — deployed as v0.5.0 (commit `8cc99ad`) on 2026-05-18
 - [x] **Phase 4.5.1: Google News Description Skip** (INSERTED 2026-05-18, completed 2026-05-18) - Post-v0.5.0 production smoke discovered Google News RSS `<description>` is structurally an `<ol><li><a>` related-articles HTML fragment, not publisher prose. Fixed at parser level: `RssSource` gained `capture_summary: bool = True` flag (opt-out), Google News registered with `capture_summary=False`; raw value still preserved in `raw_payload['summary']` for forensic fidelity. One-shot idempotent cleanup script NULLs descriptions only for topics whose every observed source is `google_news` (cross-source NYT-merged rows preserved). Image v0.5.1 ready, deploy pending operator gate
 - [x] **Phase 5: Topic Detail & Crawl Config UI** (completed 2026-05-18) - DB-driven crawl_config table (migration 0007), API GET/PUT endpoints, crawler reads per-source enabled/top_n from DB at runtime, Vue CrawlConfig view with toggle switches + editable top_n. Topic detail view (SC1) already shipped in Phase 4. Deployed as v0.6.0 (commit `1033972`) on 2026-05-18
-- [ ] **Phase 6: AI Assessment Foundation** - Local OpenCode runner, RAG over Postgres, retail relevance verdict, business_cases table
-- [ ] **Phase 7: Business-Case Generation** - Full business-case schema with importance, opportunity/risk, investment band, confidence
-- [ ] **Phase 8: Assessment UI** - Trigger-assessment UI with subset filter + business-case reading view
-- [ ] **Phase 9: PoC Hardening & Observation Setup** - Externalization audit, scaling notes, run logbook for the 1–2 month review
+- [x] **Phase 6: AI Assessment Foundation** (completed 2026-05-19, commit `58dc3ea`) - Local OpenCode runner, RAG over Postgres, retail relevance verdict, business_cases table
+- [x] **Phase 7: Business-Case Generation** (completed 2026-05-20, commit `8d06a64`) - Full business-case schema with importance, opportunity/risk, investment band, confidence; background assessment jobs + AI config UI + dashboard
+- [x] **Phase 8: Assessment UI** (completed 2026-05-20, commits `5afad65` + `9dea935`) - Trigger-assessment UI with subset filter + business-case reading view + verdict badges + topic assess button
+- [~] **Phase 9: PoC Hardening & Observation Setup** — **SUPERSEDED by Phase 10.** Single-tenant hardening obsolete given multi-tenant transformation. ARCHITECTURE.md (`c5987bc`) satisfied SC#1 in-flight. Run logbook + scaling notes folded into Phase 10 docs.
+- [ ] **Phase 10: Multi-Tenant Market Intelligence Platform** - Departments, per-(user,department) RBAC, pluggable assessment frameworks (SWOT/PESTLE/verdict), per-department source subscription & assessment, harmonization view with cross-department side-by-side + admin meta-annotation. Ingest stays AI-free and global.
 
 ## Phase Details
 
@@ -218,12 +219,33 @@ Plans:
   4. README documents the PoC success criterion and how to perform the review at the end of the observation window
 
 Plans:
-- [ ] 09-01: TBD
+- [ ] 09-01: TBD — superseded; no plans executed under Phase 9.
+
+### Phase 10: Multi-Tenant Market Intelligence Platform
+**Goal**: Evolve the system from a single-operator retail-only tool into a multi-department market intelligence platform. Multiple users belong to multiple departments with per-(user, department) roles; each department selects its own sources, AI config, and assessment framework(s) (verdict, SWOT, PESTLE). Topics remain a single global deduplicated stream; assessments are per (topic, department, framework). A harmonization view shows side-by-side cross-department business_cases per topic plus an admin-editable Net View annotation. Ingest stays AI-free (ARC-001 preserved).
+**Mode:** mvp
+**Depends on**: Phase 8 (Phase 9 superseded)
+**Requirements**: MT-001..MT-009
+**Success Criteria** (what must be TRUE):
+  1. Two or more departments can coexist with distinct sources, AI configs, frameworks, and assessment results — verified by integration test seeding 2 depts with different settings and asserting isolation.
+  2. A user with `(retail, dept_lead) + (procurement, viewer)` membership sees retail's assess buttons but only read access to procurement — verified by route-level test.
+  3. A topic assessed by retail (SWOT) and procurement (PESTLE) renders both cards on the topic's harmonization tab; an admin can write a "Net view" annotation that persists and is visible to all members of any dept the topic touches.
+  4. Existing single-tenant data (current production) migrates cleanly: pre-migration topics, business_cases, ai_config, crawl_config all visible under the "Default" department after migration with zero data loss.
+  5. Crawler still runs as a single one-shot job; the effective source list is the union of all departments' subscriptions; `crawl_runs` rows still reflect a single global run.
+  6. ARC-001 preserved — no AI code path in crawler or in any `department_sources` resolution; verified by grep.
+
+Plans:
+- [ ] 10-00 (W0): Roadmap & STATE sync + REQUIREMENTS update for Phase 10 (autonomous)
+- [ ] 10-01 (W1, deps: 10-00, **autonomous=false**): Departments + users.is_superadmin + user_departments migration + ORM + RBAC dep + departments CRUD + seed Default dept + tests
+- [ ] 10-02 (W2, deps: 10-01, **autonomous=false**): department_sources + scope ai_config/business_cases/assessment_jobs per dept + crawler union-of-dept-sources + SPA header stub + tests
+- [ ] 10-03 (W3, deps: 10-02, **autonomous=false**): assessment_frameworks + department_frameworks + framework-aware assessor refactor + verdict-identity golden test + structured_output column + tests
+- [ ] 10-04 (W4, deps: 10-03, autonomous): Frontend — Pinia stores, DepartmentSwitcher, role-gated nav, framework cards (Verdict/SWOT/PESTLE) + dispatcher, FrameworkPicker, settings views, OpenAPI codegen, strings.ts rename hook, router guards, tests
+- [ ] 10-05 (W5, deps: 10-04, autonomous): topic_harmonizations migration + endpoints + HarmonizationTab + NetViewEditor + ARCHITECTURE.md refresh + SUMMARY.md + ROADMAP/STATE/REQUIREMENTS closeout
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 4.5 → 5 → 6 → 7 → 8 → 9
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 4.5 → 4.5.1 → 5 → 6 → 7 → 8 → 10 (Phase 9 superseded)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -231,9 +253,11 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 4.5 → 5 → 6 → 7 �
 | 2. Multi-Source Ingest | 4/4 | Complete | 2026-05-15 |
 | 3. Scheduler & Ops Baseline | 5/5 | Complete | 2026-05-16 |
 | 4. Topic API & UI Shell | 6/6 | Complete | 2026-05-17 |
-| 4.5. Topic Description Capture & URL Resolution | 0/1 | Planned | - |
-| 5. Topic Detail & Crawl Config UI | 0/TBD | Not started | - |
-| 6. AI Assessment Foundation | 0/TBD | Not started | - |
-| 7. Business-Case Generation | 0/TBD | Not started | - |
-| 8. Assessment UI | 0/TBD | Not started | - |
-| 9. PoC Hardening & Observation Setup | 0/TBD | Not started | - |
+| 4.5. Topic Description Capture & URL Resolution | 1/1 | Complete | 2026-05-18 |
+| 4.5.1. Google News Description Skip | 1/1 | Complete | 2026-05-18 |
+| 5. Topic Detail & Crawl Config UI | 1/1 | Complete | 2026-05-18 |
+| 6. AI Assessment Foundation | 1/1 | Complete | 2026-05-19 |
+| 7. Business-Case Generation | 1/1 | Complete | 2026-05-20 |
+| 8. Assessment UI | 1/1 | Complete | 2026-05-20 |
+| 9. PoC Hardening & Observation Setup | 0/0 | Superseded | — |
+| 10. Multi-Tenant Market Intelligence Platform | 0/6 | In progress | — |

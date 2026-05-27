@@ -38,6 +38,7 @@ from api.routes import crawl_config as crawl_config_routes
 from api.routes import assessment as assessment_routes
 from api.routes import ai_config as ai_config_routes
 from api.routes import dashboard as dashboard_routes
+from api.routes import departments as departments_routes
 
 
 @asynccontextmanager
@@ -74,6 +75,7 @@ app.include_router(crawl_config_routes.router, prefix="/api")
 app.include_router(assessment_routes.router, prefix="/api")
 app.include_router(ai_config_routes.router, prefix="/api")
 app.include_router(dashboard_routes.router, prefix="/api")
+app.include_router(departments_routes.router, prefix="/api")
 app.include_router(internal_routes.router, prefix="/api")
 
 # Auth middleware: protects all /api/* except /api/login and /api/healthz

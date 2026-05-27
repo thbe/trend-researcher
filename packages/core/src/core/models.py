@@ -18,9 +18,18 @@ Notes
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, Text, UniqueConstraint, text
+from typing import Literal
+
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, Integer, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+# Phase 10 (MT-002): per-(user, department) role. The string set is enforced
+# at the DB layer via a CHECK constraint on ``user_departments.role`` — see
+# migration 0016. This Literal is the API contract surface used by Pydantic
+# schemas + FastAPI dependencies (``require_role``).
+RoleLiteral = Literal["viewer", "analyst", "dept_lead"]
 
 
 class Base(DeclarativeBase):
@@ -216,11 +225,116 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )
+    is_superadmin: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     created_at: Mapped[str] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
         server_default=text("now()"),
     )
+
+    # Phase 10 (MT-002): per-(user, department) memberships. Each row carries
+    # the role this user has *within* that department.
+    departments: Mapped[list["UserDepartment"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class Department(Base):
+    """A market-intelligence tenant (Phase 10, MT-001).
+
+    Departments are the per-tenant scope for assessment configuration,
+    sources subscription, frameworks, and business cases. Topics remain
+    GLOBAL (ARC-001 preserved) — only the *lens* applied to them is
+    per-department.
+
+    The ``slug`` column is constrained to lower-case ASCII letters, digits,
+    hyphens and underscores via a DB CHECK (see migration 0016). The
+    seeded Default department uses the hardcoded UUID
+    ``00000000-0000-0000-0000-000000000001`` so downgrade + tests can
+    reference it deterministically.
+    """
+
+    __tablename__ = "departments"
+    __table_args__ = (
+        CheckConstraint(
+            "slug = lower(slug) AND slug ~ '^[a-z0-9_-]+$'",
+            name="ck_departments_slug_format",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+    updated_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    members: Mapped[list["UserDepartment"]] = relationship(
+        back_populates="department",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class UserDepartment(Base):
+    """Join row between :class:`User` and :class:`Department` (Phase 10, MT-002).
+
+    Composite primary key ``(user_id, department_id)``. The ``role`` column
+    is one of :data:`RoleLiteral` — enforced by a DB CHECK constraint (see
+    migration 0016). A user can belong to N departments with a different
+    role in each; system-wide admin is the orthogonal ``users.is_superadmin``
+    boolean.
+    """
+
+    __tablename__ = "user_departments"
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('viewer', 'analyst', 'dept_lead')",
+            name="ck_user_departments_role",
+        ),
+        Index("ix_user_departments_department_id", "department_id"),
+    )
+
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    department_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("departments.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    role: Mapped[RoleLiteral] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+    updated_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    user: Mapped["User"] = relationship(back_populates="departments")
+    department: Mapped["Department"] = relationship(back_populates="members")
 
 
 class CrawlConfig(Base):
@@ -358,4 +472,4 @@ class AssessmentJob(Base):
     )
 
 
-__all__ = ["AIConfig", "AssessmentJob", "Base", "BusinessCase", "CrawlConfig", "CrawlRun", "Topic", "TopicSource", "User"]
+__all__ = ["AIConfig", "AssessmentJob", "Base", "BusinessCase", "CrawlConfig", "CrawlRun", "Department", "RoleLiteral", "Topic", "TopicSource", "User", "UserDepartment"]

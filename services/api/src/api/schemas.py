@@ -14,6 +14,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Phase 10 (MT-002): RBAC role literal — mirrors ``core.models.RoleLiteral``
+# but redeclared here so this module has zero import-time dependency on the
+# ORM layer. Keep in sync with migration 0016's CHECK constraint.
+RoleLiteralT = Literal["viewer", "analyst", "dept_lead"]
+
 
 class HealthzResponse(BaseModel):
     """Liveness + DB-reachability probe response."""
@@ -255,13 +260,123 @@ class AIConfigUpdateRequest(BaseModel):
     request_timeout_seconds: int | None = Field(None, ge=10, le=3600)
 
 
+# ---------------------------------------------------------------------------
+# Phase 10 (MT-001/MT-002): Departments + memberships + login extension
+# ---------------------------------------------------------------------------
+
+
+class DepartmentCreate(BaseModel):
+    """Create a new department (superadmin-only)."""
+
+    name: str = Field(..., min_length=1, max_length=200)
+    slug: str = Field(
+        ..., min_length=1, max_length=64, pattern=r"^[a-z0-9_-]+$"
+    )
+    description: str | None = Field(None, max_length=2000)
+
+
+class DepartmentUpdate(BaseModel):
+    """Update mutable department fields. ``slug`` is immutable in v1."""
+
+    name: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = Field(None, max_length=2000)
+
+
+class DepartmentResponse(BaseModel):
+    """One ``departments`` row as JSON."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    slug: str
+    description: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DepartmentsListResponse(BaseModel):
+    """Wrapper for ``GET /api/departments``."""
+
+    departments: list[DepartmentResponse]
+    total: int
+
+
+class MemberResponse(BaseModel):
+    """One ``user_departments`` row joined with ``users``."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: UUID
+    username: str
+    role: RoleLiteralT
+    created_at: datetime
+    updated_at: datetime
+
+
+class MembersListResponse(BaseModel):
+    """Wrapper for ``GET /api/departments/{id}/members``."""
+
+    members: list[MemberResponse]
+    total: int
+
+
+class MemberCreate(BaseModel):
+    """Add a user to a department with a role."""
+
+    user_id: UUID
+    role: RoleLiteralT
+
+
+class MemberUpdate(BaseModel):
+    """Change a member's role within a department."""
+
+    role: RoleLiteralT
+
+
+class LoginDepartment(BaseModel):
+    """Department summary embedded in the login response."""
+
+    id: UUID
+    name: str
+    slug: str
+    role: RoleLiteralT
+
+
+class LoginResponse(BaseModel):
+    """``POST /api/login`` response payload.
+
+    Backwards-compatible: ``ok`` + ``username`` are preserved verbatim; the
+    Phase 10 fields ``is_superadmin`` + ``departments`` are added so the SPA
+    can populate its dept switcher without a follow-up roundtrip. For
+    superadmin users, ``departments`` contains the FULL list of departments
+    in the system with a synthesised role of ``dept_lead``.
+    """
+
+    ok: bool
+    username: str
+    is_superadmin: bool
+    departments: list[LoginDepartment]
+
+
 __all__ = [
     "CrawlConfigResponse",
     "AIConfigResponse",
     "AIConfigUpdateRequest",
     "CrawlConfigCreateRequest",
     "CrawlConfigUpdateRequest",
+    "DepartmentCreate",
+    "DepartmentResponse",
+    "DepartmentUpdate",
+    "DepartmentsListResponse",
     "HealthzResponse",
+    "LoginDepartment",
+    "LoginResponse",
+    "MemberCreate",
+    "MemberResponse",
+    "MemberUpdate",
+    "MembersListResponse",
+    "RoleLiteralT",
     "RunResponse",
     "RunsListResponse",
     "TopicResponse",
