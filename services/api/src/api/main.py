@@ -22,6 +22,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse
 
 import core
+from assessor.domain.frameworks import registry as framework_registry
+from core.seed import seed_frameworks
 from api.auth.middleware import AuthMiddleware
 from api.auth.seed import ensure_seed_user
 from api.dependencies import dispose_engine, get_web_dist_dir
@@ -57,6 +59,12 @@ async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
             username=settings.auth_seed_username,
             password=settings.auth_seed_password,
         )
+        # Phase 10 / plan 10-03 T03: keep assessment_frameworks metadata in
+        # sync with the assessor registry on every restart. Migration 0019
+        # handles the cold-start INSERT; this call propagates subsequent
+        # schema / prompt_version / description changes without a new
+        # migration.
+        await seed_frameworks(session, framework_registry.all_definitions())
     await engine.dispose()
 
     yield
