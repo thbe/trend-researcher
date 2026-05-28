@@ -58,10 +58,14 @@ export function listBusinessCases(limit = 50, category?: string): Promise<Busine
   return request<BusinessCase[]>(url)
 }
 
-export async function assessBatch(): Promise<AssessJobResponse> {
+export async function assessBatch(frameworkId?: string | null): Promise<AssessJobResponse> {
+  // Phase 10 T06: forward-compatible framework_id. Backend may not yet
+  // accept this field; unknown body keys are tolerated server-side.
+  const body = frameworkId ? JSON.stringify({ framework_id: frameworkId }) : undefined
   const response = await fetch('/api/assess', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body,
   })
   if (!response.ok) {
     let detail = `Assessment failed: ${response.status}`
@@ -82,10 +86,16 @@ export function listJobs(limit = 10): Promise<AssessJob[]> {
   return request<AssessJob[]>(`/api/assess/jobs?limit=${limit}`)
 }
 
-export async function assessTopic(topicId: string): Promise<Record<string, unknown>> {
+export async function assessTopic(
+  topicId: string,
+  frameworkId?: string | null,
+): Promise<Record<string, unknown>> {
+  // Phase 10 T06: forward-compatible framework_id (see assessBatch).
+  const body = frameworkId ? JSON.stringify({ framework_id: frameworkId }) : undefined
   const response = await fetch(`/api/assess/${encodeURIComponent(topicId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body,
   })
   if (!response.ok) {
     let detail = `Assessment failed: ${response.status}`

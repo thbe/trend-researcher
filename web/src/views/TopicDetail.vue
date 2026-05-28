@@ -2,12 +2,16 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getTopic, type TopicDetail } from '@/api/topics'
-import { assessTopic } from '@/api/assessment'
+import { assessTopic, type BusinessCase } from '@/api/assessment'
 import { ApiError } from '@/api/client'
 import { formatLongevity, formatRelative } from '@/lib/format'
+import { useSessionStore } from '@/stores/session'
+import BusinessCaseCard from '@/components/BusinessCaseCard.vue'
+import FrameworkPicker from '@/components/FrameworkPicker.vue'
 
 const props = defineProps<{ id: string }>()
 const router = useRouter()
+const session = useSessionStore()
 
 const topic = ref<TopicDetail | null>(null)
 const loading = ref(false)
@@ -69,15 +73,39 @@ function goBack() {
 }
 
 const assessing = ref(false)
-const assessResult = ref<Record<string, unknown> | null>(null)
+const assessResult = ref<BusinessCase | Record<string, unknown> | null>(null)
 const assessError = ref<string | null>(null)
+const selectedFrameworkId = ref<string | null>(null)
+
+// Phase 10 T06: when the API exposes a list of per-department business cases
+// on TopicDetail, prefer rendering those via BusinessCaseCard. Otherwise
+// fall back to the legacy single-shot assess flow (server may not yet
+// return business_cases on this endpoint).
+const businessCases = computed<BusinessCase[]>(() => topic.value?.business_cases ?? [])
+const hasBusinessCases = computed(() => businessCases.value.length > 0)
+
+// Synthesise a BusinessCase-shaped object from the legacy POST /api/assess
+// response when possible so we can render it via BusinessCaseCard.
+const inlineCase = computed<BusinessCase | null>(() => {
+  const r = assessResult.value
+  if (!r || typeof r !== 'object') return null
+  const candidate = r as Partial<BusinessCase>
+  if (typeof candidate.relevance_verdict !== 'string') return null
+  return candidate as BusinessCase
+})
 
 async function runAssess() {
+  if (!session.canAssess) {
+    assessError.value = 'You do not have permission to run AI assessment in this department.'
+    return
+  }
   assessing.value = true
   assessError.value = null
   assessResult.value = null
   try {
-    assessResult.value = await assessTopic(props.id)
+    assessResult.value = await assessTopic(props.id, selectedFrameworkId.value)
+    // Refresh the topic so any newly persisted business_cases show up.
+    await load()
   } catch (err) {
     assessError.value = (err as Error).message
   } finally {
@@ -168,18 +196,30 @@ watch(() => props.id, load)
         <div class="text-h6 mt-6 mb-2">
           AI Assessment
         </div>
-        <div class="d-flex align-center mb-3">
+
+        <div class="d-flex align-center mb-3" style="gap: 12px">
+          <FrameworkPicker
+            v-model="selectedFrameworkId"
+            :disabled="assessing || !session.canAssess"
+            style="max-width: 280px"
+          />
           <v-btn
             color="primary"
-            size="small"
             prepend-icon="mdi-brain"
             :loading="assessing"
-            :disabled="assessing"
+            :disabled="assessing || !session.canAssess"
             @click="runAssess"
           >
             Assess Topic
           </v-btn>
+          <span
+            v-if="!session.canAssess"
+            class="text-caption text-medium-emphasis"
+          >
+            Requires analyst role in the active department.
+          </span>
         </div>
+
         <v-alert
           v-if="assessError"
           type="error"
@@ -188,20 +228,26 @@ watch(() => props.id, load)
           class="mb-3"
           :text="assessError"
         />
-        <v-card v-if="assessResult" variant="outlined" class="mb-4">
+
+        <!-- Preferred path: backend exposes per-dept business_cases on TopicDetail. -->
+        <div v-if="hasBusinessCases" class="d-flex flex-column" style="gap: 12px">
+          <BusinessCaseCard
+            v-for="bc in businessCases"
+            :key="bc.id"
+            :case="bc"
+          />
+        </div>
+
+        <!-- Fallback: legacy single-shot assess returned a BusinessCase-shaped object. -->
+        <BusinessCaseCard
+          v-else-if="inlineCase"
+          :case="inlineCase"
+        />
+
+        <!-- Last-resort fallback: server returned an opaque payload. -->
+        <v-card v-else-if="assessResult" variant="outlined" class="mb-4">
           <v-card-text>
-            <div class="d-flex align-center mb-2">
-              <v-chip
-                :color="assessResult.relevance_verdict === 'relevant' ? 'success' : 'grey'"
-                variant="tonal"
-                label
-                class="mr-3"
-              >
-                {{ assessResult.relevance_verdict }}
-              </v-chip>
-              <span class="text-caption text-medium-emphasis">{{ assessResult.model_used }}</span>
-            </div>
-            <p class="text-body-2">{{ assessResult.relevance_reason }}</p>
+            <pre class="text-caption" style="white-space: pre-wrap">{{ JSON.stringify(assessResult, null, 2) }}</pre>
           </v-card-text>
         </v-card>
 

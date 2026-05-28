@@ -3,6 +3,7 @@
 // (TopicResponse, TopicsListResponse, TopicSourceResponse,
 // TopicDetailResponse).
 import { ApiError, request } from './client'
+import type { BusinessCase } from './assessment'
 
 export interface Topic {
   id: string
@@ -33,6 +34,10 @@ export interface TopicSource {
 export interface TopicDetail extends Topic {
   topic_metadata: Record<string, unknown>
   sources: TopicSource[]
+  // Phase 10 T06: forward-compatible list of per-department business cases.
+  // Absent on pre-10-03 responses; SPA falls back to the legacy single-shot
+  // assess flow when missing.
+  business_cases?: BusinessCase[]
 }
 
 export interface TopicsListResponse {

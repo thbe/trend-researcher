@@ -5,6 +5,7 @@ import { listTopics, type Topic } from '@/api/topics'
 import { assessBatch } from '@/api/assessment'
 import { ApiError } from '@/api/client'
 import { formatLongevity, formatRelative } from '@/lib/format'
+import { STRINGS } from '@/lib/strings'
 
 interface SortItem {
   key: string
@@ -198,7 +199,10 @@ onMounted(() => {
   <div>
     <div class="d-flex align-end mb-4">
       <div>
-        <h1 class="text-h5 font-weight-medium">Topics</h1>
+        <h1 class="text-h5 font-weight-medium">{{ STRINGS.PAGE_TOPICS }}</h1>
+        <div class="text-caption text-medium-emphasis mt-1">
+          Topics are global across all departments; AI relevance is assessed per department.
+        </div>
         <div v-if="subtitleText" class="text-body-2 text-medium-emphasis mt-1">
           {{ subtitleText }} · sorted {{ echoedSort }}
         </div>

@@ -1,12 +1,22 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { getDashboard } from '@/api/dashboard'
 import type { DashboardData } from '@/api/dashboard'
+import { useSessionStore } from '@/stores/session'
+import { STRINGS } from '@/lib/strings'
 
 const router = useRouter()
+const session = useSessionStore()
 const data = ref<DashboardData | null>(null)
 const loading = ref(true)
+
+const contextLabel = computed(() => {
+  const dept = session.activeDepartment
+  if (!dept) return ''
+  const suffix = session.isSuperadmin ? ` · ${STRINGS.LABEL_SUPERADMIN}` : ''
+  return `${STRINGS.LABEL_ACTIVE_DEPT}: ${dept.name}${suffix}`
+})
 
 onMounted(async () => {
   try {
@@ -32,7 +42,11 @@ function goAssessed() {
 
 <template>
   <div>
-    <h1 class="text-h4 mb-6">Dashboard</h1>
+    <h1 class="text-h4 mb-1">{{ STRINGS.PAGE_DASHBOARD }}</h1>
+    <div v-if="contextLabel" class="text-body-2 text-medium-emphasis mb-6">
+      {{ contextLabel }}
+    </div>
+    <div v-else class="mb-6" />
 
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
 

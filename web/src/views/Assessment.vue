@@ -3,15 +3,20 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { listBusinessCases, assessBatch, getJob, type BusinessCase, type AssessJob } from '@/api/assessment'
 import { formatRelative } from '@/lib/format'
+import { useSessionStore } from '@/stores/session'
+import { STRINGS } from '@/lib/strings'
+import FrameworkPicker from '@/components/FrameworkPicker.vue'
 
 const router = useRouter()
 const route = useRoute()
+const session = useSessionStore()
 const items = ref<BusinessCase[]>([])
 const loading = ref(false)
 const assessing = ref(false)
 const error = ref<string | null>(null)
 const activeJob = ref<AssessJob | null>(null)
 const categoryFilter = ref<string | undefined>(route.query.category as string | undefined)
+const selectedFrameworkId = ref<string | null>(null)
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -80,7 +85,7 @@ async function runAssessment() {
   error.value = null
   activeJob.value = null
   try {
-    const resp = await assessBatch()
+    const resp = await assessBatch(selectedFrameworkId.value)
     activeJob.value = {
       id: resp.job_id,
       state: 'pending',
@@ -123,9 +128,10 @@ onUnmounted(stopPolling)
   <div>
     <div class="d-flex align-center mb-4">
       <div>
-        <h1 class="text-h5 font-weight-medium">AI Assessment</h1>
+        <h1 class="text-h5 font-weight-medium">{{ STRINGS.PAGE_ASSESSMENT }}</h1>
         <div class="text-body-2 text-medium-emphasis mt-1">
-          Retail relevance assessment of trending topics
+          AI relevance assessment for
+          <strong>{{ session.activeDepartment?.name ?? '—' }}</strong>
         </div>
       </div>
       <v-spacer />
@@ -134,11 +140,17 @@ onUnmounted(stopPolling)
         <v-chip value="risk" color="error" variant="tonal" filter>Risks</v-chip>
         <v-chip value="neutral" color="grey" variant="tonal" filter>Neutral</v-chip>
       </v-chip-group>
+      <FrameworkPicker
+        v-model="selectedFrameworkId"
+        :disabled="assessing || !session.canAssess"
+        style="max-width: 220px"
+        class="mr-3"
+      />
       <v-btn
         color="primary"
         prepend-icon="mdi-brain"
         :loading="assessing"
-        :disabled="assessing"
+        :disabled="assessing || !session.canAssess"
         @click="runAssessment"
       >
         Assess Unassessed Topics
