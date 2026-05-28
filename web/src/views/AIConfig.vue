@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { getAIConfig, updateAIConfig, listAvailableModels, type AIConfig } from '@/api/aiConfig'
+import { useSessionStore } from '@/stores/session'
+
+const session = useSessionStore()
+const activeDeptName = computed(() => session.activeDepartment?.name ?? '—')
 
 const config = ref<AIConfig | null>(null)
 const loading = ref(false)
 const saving = ref(false)
+const initializing = ref(false)
 const error = ref<string | null>(null)
 const success = ref<string | null>(null)
+
+// Empty-state flag: backend returned 404 (no AI config row yet for this dept).
+const isEmpty = ref(false)
 
 // Form fields
 const form = ref({
@@ -24,26 +32,60 @@ const form = ref({
 const availableModels = ref<string[]>([])
 const modelsLoading = ref(false)
 
+function applyConfig(cfg: AIConfig) {
+  config.value = cfg
+  form.value = {
+    base_url: cfg.base_url,
+    model: cfg.model,
+    api_token: cfg.api_token ?? '',
+    business_context: cfg.business_context ?? '',
+    opportunity_criteria: cfg.opportunity_criteria ?? '',
+    risk_criteria: cfg.risk_criteria ?? '',
+    thinking_effort: cfg.thinking_effort ?? 'off',
+    request_timeout_seconds: cfg.request_timeout_seconds ?? 120,
+  }
+}
+
 async function load() {
   loading.value = true
   error.value = null
+  isEmpty.value = false
   try {
-    config.value = await getAIConfig()
-    form.value = {
-      base_url: config.value.base_url,
-      model: config.value.model,
-      api_token: config.value.api_token ?? '',
-      business_context: config.value.business_context ?? '',
-      opportunity_criteria: config.value.opportunity_criteria ?? '',
-      risk_criteria: config.value.risk_criteria ?? '',
-      thinking_effort: config.value.thinking_effort ?? 'off',
-      request_timeout_seconds: config.value.request_timeout_seconds ?? 120,
+    const cfg = await getAIConfig()
+    if (cfg === null) {
+      isEmpty.value = true
+      config.value = null
+    } else {
+      applyConfig(cfg)
     }
     await fetchModels()
   } catch (e: any) {
     error.value = e.message || 'Failed to load AI config'
   } finally {
     loading.value = false
+  }
+}
+
+async function initialize() {
+  // Seed an initial AI config row for the active department with minimal
+  // defaults. User can edit + save afterwards.
+  initializing.value = true
+  error.value = null
+  try {
+    const cfg = await updateAIConfig({
+      base_url: 'http://localhost:11434',
+      model: 'llama3',
+      thinking_effort: 'off',
+      request_timeout_seconds: 120,
+    })
+    applyConfig(cfg)
+    isEmpty.value = false
+    success.value = 'AI configuration initialized — edit and save when ready'
+    await fetchModels()
+  } catch (e: any) {
+    error.value = e.message || 'Failed to initialize AI config'
+  } finally {
+    initializing.value = false
   }
 }
 
@@ -65,7 +107,7 @@ async function save() {
   error.value = null
   success.value = null
   try {
-    config.value = await updateAIConfig({
+    const cfg = await updateAIConfig({
       base_url: form.value.base_url,
       model: form.value.model,
       api_token: form.value.api_token || null,
@@ -75,16 +117,7 @@ async function save() {
       thinking_effort: form.value.thinking_effort,
       request_timeout_seconds: form.value.request_timeout_seconds,
     })
-    form.value = {
-      base_url: config.value.base_url,
-      model: config.value.model,
-      api_token: config.value.api_token ?? '',
-      business_context: config.value.business_context ?? '',
-      opportunity_criteria: config.value.opportunity_criteria ?? '',
-      risk_criteria: config.value.risk_criteria ?? '',
-      thinking_effort: config.value.thinking_effort ?? 'off',
-      request_timeout_seconds: config.value.request_timeout_seconds ?? 120,
-    }
+    applyConfig(cfg)
     success.value = 'AI configuration saved successfully'
   } catch (e: any) {
     error.value = e.message || 'Failed to save AI config'
@@ -100,7 +133,10 @@ onMounted(load)
   <v-container>
     <v-row>
       <v-col cols="12" md="8" lg="6">
-        <h1 class="text-h4 mb-4">AI Configuration</h1>
+        <h1 class="text-h4 mb-1">AI Configuration</h1>
+        <div class="text-subtitle-1 text-medium-emphasis mb-4">
+          Configuring AI for: <strong>{{ activeDeptName }}</strong>
+        </div>
 
         <v-alert v-if="error" type="error" closable class="mb-4" @click:close="error = null">
           {{ error }}
@@ -110,7 +146,22 @@ onMounted(load)
           {{ success }}
         </v-alert>
 
-        <v-card :loading="loading">
+        <v-card v-if="isEmpty" class="mb-4" variant="outlined">
+          <v-card-text class="text-center pa-8">
+            <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-robot-outline</v-icon>
+            <h2 class="text-h6 mb-2">No AI configuration yet</h2>
+            <p class="text-body-2 text-medium-emphasis mb-4">
+              The <strong>{{ activeDeptName }}</strong> department doesn't have AI settings yet.
+              Initialize with sensible defaults — you can edit and save afterwards.
+            </p>
+            <v-btn color="primary" :loading="initializing" @click="initialize">
+              <v-icon start>mdi-rocket-launch-outline</v-icon>
+              Initialize AI Configuration
+            </v-btn>
+          </v-card-text>
+        </v-card>
+
+        <v-card v-else :loading="loading">
           <v-card-text>
             <v-text-field
               v-model="form.base_url"
@@ -214,7 +265,7 @@ onMounted(load)
           </v-card-actions>
         </v-card>
 
-        <v-card class="mt-4" variant="outlined" v-if="availableModels.length > 0">
+        <v-card class="mt-4" variant="outlined" v-if="!isEmpty && availableModels.length > 0">
           <v-card-title class="text-subtitle-1">
             <v-icon start>mdi-information-outline</v-icon>
             Available Models ({{ availableModels.length }})

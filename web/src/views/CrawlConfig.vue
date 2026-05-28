@@ -245,7 +245,12 @@ async function doCleanup() {
     <v-row>
       <v-col>
         <div class="d-flex align-center mb-4">
-          <h1 class="text-h4">Sources</h1>
+          <div>
+            <h1 class="text-h4">Sources — Tech Config (Global)</h1>
+            <div class="text-caption text-medium-emphasis">
+              Connector configuration shared across all departments. Per-department subscriptions live in Source Subscriptions.
+            </div>
+          </div>
           <v-spacer />
           <v-btn
             color="warning"
