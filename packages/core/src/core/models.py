@@ -321,6 +321,17 @@ class Department(Base):
         passive_deletes=True,
     )
 
+    # Phase 10 (plan 10-03, MT-010): per-dept framework enablement. Each
+    # row records that this department has opted-in to a given assessment
+    # framework (verdict / swot / pestle / future). Exactly one row per
+    # department carries ``is_default = true`` (enforced by partial unique
+    # index in migration 0019).
+    framework_links: Mapped[list["DepartmentFramework"]] = relationship(
+        back_populates="department",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
 
 class UserDepartment(Base):
     """Join row between :class:`User` and :class:`Department` (Phase 10, MT-002).
@@ -513,6 +524,15 @@ class BusinessCase(Base):
     __tablename__ = "business_cases"
     __table_args__ = (
         Index("ix_business_cases_department_id", "department_id"),
+        Index("ix_business_cases_framework_id", "framework_id"),
+        UniqueConstraint(
+            "topic_id",
+            "department_id",
+            "framework_id",
+            "prompt_version",
+            "model_used",
+            name="uq_business_cases_topic_dept_fw_prompt_model",
+        ),
     )
 
     id: Mapped[str] = mapped_column(
@@ -531,11 +551,27 @@ class BusinessCase(Base):
         ForeignKey("departments.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # Phase 10 (plan 10-03, MT-010): which assessment framework produced
+    # this row. Backfilled to the verdict framework UUID in 0019.
+    framework_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("assessment_frameworks.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
     relevance_verdict: Mapped[str] = mapped_column(Text, nullable=False)
     relevance_reason: Mapped[str] = mapped_column(Text, nullable=False)
     model_used: Mapped[str] = mapped_column(Text, nullable=False)
     prompt_version: Mapped[str] = mapped_column(Text, nullable=False)
     raw_response: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Phase 10 (plan 10-03): canonical framework-shaped output, validated
+    # against the framework's ``json_schema``. For verdict rows backfilled
+    # in 0019 this mirrors ``raw_response`` (or a synthesised
+    # ``{verdict, reason}`` object when raw_response was NULL).
+    structured_output: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
     generated_at: Mapped[str] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
@@ -548,6 +584,9 @@ class BusinessCase(Base):
     )
 
     department: Mapped["Department"] = relationship(
+        back_populates="business_cases"
+    )
+    framework: Mapped["AssessmentFramework"] = relationship(
         back_populates="business_cases"
     )
 
@@ -595,6 +634,7 @@ class AssessmentJob(Base):
     __tablename__ = "assessment_jobs"
     __table_args__ = (
         Index("ix_assessment_jobs_department_id", "department_id"),
+        Index("ix_assessment_jobs_framework_id", "framework_id"),
     )
 
     id: Mapped[str] = mapped_column(
@@ -605,6 +645,13 @@ class AssessmentJob(Base):
     department_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("departments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Phase 10 (plan 10-03, MT-010): which framework this job runs against.
+    # Backfilled to verdict UUID in 0019.
+    framework_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("assessment_frameworks.id", ondelete="RESTRICT"),
         nullable=False,
     )
     state: Mapped[str] = mapped_column(
@@ -634,6 +681,121 @@ class AssessmentJob(Base):
     department: Mapped["Department"] = relationship(
         back_populates="assessment_jobs"
     )
+    framework: Mapped["AssessmentFramework"] = relationship(
+        back_populates="assessment_jobs"
+    )
 
 
-__all__ = ["AIConfig", "AssessmentJob", "Base", "BusinessCase", "CrawlConfig", "CrawlRun", "Department", "DepartmentSource", "RoleLiteral", "Topic", "TopicSource", "User", "UserDepartment"]
+class AssessmentFramework(Base):
+    """Registry of pluggable assessment frameworks (Phase 10, plan 10-03).
+
+    Each row is a system-level framework definition (e.g. ``verdict``,
+    ``swot``, ``pestle``) that departments can opt-in to via
+    :class:`DepartmentFramework`. The seeded rows use hardcoded UUIDs
+    declared in migration 0019 so the seed bootstrap (T03) can upsert
+    idempotently from the registry module.
+
+    - ``key`` is the stable string identifier the assessor dispatches on
+      (matches the registry key in
+      ``services/assessor/src/assessor/domain/frameworks/registry.py``).
+    - ``json_schema`` is the JSONB schema the framework's structured
+      output must validate against (mirrors the schema in the framework
+      module — single source of truth lives in the registry module; this
+      column is the cached DB copy used for validation in the API).
+    - ``display_component`` is the Vuetify component name the SPA picks
+      to render rows produced by this framework.
+    """
+
+    __tablename__ = "assessment_frameworks"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    key: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    display_component: Mapped[str] = mapped_column(Text, nullable=False)
+    json_schema: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    prompt_version: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+    updated_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    department_links: Mapped[list["DepartmentFramework"]] = relationship(
+        back_populates="framework",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    business_cases: Mapped[list["BusinessCase"]] = relationship(
+        back_populates="framework"
+    )
+    assessment_jobs: Mapped[list["AssessmentJob"]] = relationship(
+        back_populates="framework"
+    )
+
+
+class DepartmentFramework(Base):
+    """Per-(department, framework) opt-in row (Phase 10, plan 10-03).
+
+    Composite PK ``(department_id, framework_id)``. Exactly one row per
+    department carries ``is_default = true`` — enforced at the DB layer
+    via the partial unique index
+    ``uq_department_frameworks_one_default_per_dept`` (created in
+    migration 0019). The API picks the default framework whenever an
+    assessment request omits ``framework_id``.
+
+    Backfill in 0019 enables all three seeded frameworks for every
+    existing department, with ``verdict`` flagged as the default so
+    legacy single-tenant behaviour is preserved.
+    """
+
+    __tablename__ = "department_frameworks"
+    __table_args__ = (
+        Index(
+            "ix_department_frameworks_framework_id", "framework_id"
+        ),
+        Index(
+            "uq_department_frameworks_one_default_per_dept",
+            "department_id",
+            unique=True,
+            postgresql_where=text("is_default = true"),
+        ),
+    )
+
+    department_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("departments.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    framework_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("assessment_frameworks.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    created_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    department: Mapped["Department"] = relationship(
+        back_populates="framework_links"
+    )
+    framework: Mapped["AssessmentFramework"] = relationship(
+        back_populates="department_links"
+    )
+
+
+__all__ = ["AIConfig", "AssessmentFramework", "AssessmentJob", "Base", "BusinessCase", "CrawlConfig", "CrawlRun", "Department", "DepartmentFramework", "DepartmentPAT", "DepartmentSource", "RoleLiteral", "Topic", "TopicSource", "User", "UserDepartment"]
