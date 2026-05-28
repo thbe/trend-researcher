@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status:** as-built, current as of `main` @ commit reflecting AI Config request-timeout + topic-list URL state persistence.
+> **Status:** as-built, current as of `main` @ Phase 10 complete (multi-tenant platform with harmonization).
 > **Audience:** developers maintaining the system, operators deploying it, future contributors evaluating where new functionality belongs.
 
 ---
@@ -26,13 +26,15 @@ The architecture is shaped by four locked constraints:
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                          Vue 3 + Vuetify SPA (web/)                         │
 │   Dashboard │ Topic list │ Topic detail │ AI config │ Crawl config │ Login  │
+│   Dept switcher │ Framework cards │ Harmonization tab │ Settings views │
 └─────────────────────────────────────────────────────────────────────────────┘
                                      │ HTTP + cookie session
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                       FastAPI control plane (services/api/)                 │
 │  Routes: topics │ runs │ crawl-config │ ai-config │ assessment │ dashboard  │
-│  Cross-cutting: auth middleware │ dump-debouncer │ SPA StaticFiles mount    │
+│  Routes: departments │ harmonization │ frameworks │ users                    │
+│  Cross-cutting: auth middleware │ RBAC deps │ dump-debouncer │ SPA mount    │
 └─────────────────────────────────────────────────────────────────────────────┘
                 │                          │                            │
                 │ invokes orchestrator     │ enqueues background job    │
@@ -341,7 +343,40 @@ These are **not** in the architecture and adding them requires re-litigating a l
 
 ---
 
-## 10. References
+## 10. Multi-Tenant Model (Phase 10)
+
+**Core principle:** Topics are global; assessments are scoped per (department, framework).
+
+### Tenancy & RBAC
+
+| Concept | Implementation |
+|---------|---------------|
+| Department | `departments` table; users belong to 1+ depts via `user_departments` |
+| Roles | `superadmin` (global), `dept_lead`, `analyst` — per (user, dept) |
+| Active context | `X-Active-Department-Id` header selects working department |
+| Auth | bcrypt + HMAC-SHA256 signed cookie; `get_current_user` + role deps |
+
+### Assessment Frameworks
+
+Pluggable assessment types (`assessment_frameworks` table): Verdict, SWOT, PESTLE. Each department enables a subset via `department_frameworks`. The assessor dispatches to framework-specific prompt templates and stores results in `business_cases.structured_output` (JSONB).
+
+### Harmonization Layer
+
+Cross-department synthesis lives in `topic_harmonizations` (one row per topic). Any authenticated user can **read** harmonizations (cross-dept visibility). Only `dept_lead+` or `superadmin` can **write** (net view authoring). The SPA renders a tabbed view: "My Department" (filtered business cases) vs "Cross-Department" (all cases + net view editor).
+
+### Data Model Additions (Phase 10)
+
+```
+departments, user_departments, department_sources,
+assessment_frameworks, department_frameworks,
+topic_harmonizations
+```
+
+Migrations 0014–0020 (additive, safe to apply incrementally).
+
+---
+
+## 11. References
 
 - `README.md` — quickstart, repo layout, env-var reference.
 - `docs/API.md` — full HTTP API reference.

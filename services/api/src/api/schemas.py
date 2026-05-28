@@ -528,6 +528,48 @@ class AssessSingleRequest(BaseModel):
     framework_id: UUID | None = None
 
 
+# ---------------------------------------------------------------------------
+# Phase 10 (plan 10-05, MT-012): Harmonization
+# ---------------------------------------------------------------------------
+
+
+class HarmonizationPutRequest(BaseModel):
+    """Body for ``PUT /api/topics/{topic_id}/harmonization``."""
+
+    net_view: str = Field(..., min_length=1, max_length=10_000)
+
+
+class HarmonizationNetView(BaseModel):
+    """The optional Net View annotation on a topic."""
+
+    text: str
+    authored_by: dict | None = None  # {"id": ..., "username": ...} or null
+    authored_at: datetime
+    updated_at: datetime
+
+
+class HarmonizationBusinessCaseEntry(BaseModel):
+    """One business case in the harmonization response (cross-department)."""
+
+    id: UUID
+    department: dict  # {"id": ..., "name": ...}
+    framework: dict  # {"id": ..., "key": ..., "name": ..., "display_component": ...}
+    structured_output: dict
+    relevance_verdict: str | None = None
+    importance_score: float | None = None
+    confidence: float | None = None
+    created_at: datetime
+    model_used: str | None = None
+
+
+class HarmonizationResponse(BaseModel):
+    """``GET /api/topics/{topic_id}/harmonization`` response."""
+
+    topic: dict  # {"id": ..., "title": ..., ...}
+    business_cases: list[HarmonizationBusinessCaseEntry]
+    net_view: HarmonizationNetView | None = None
+
+
 __all__ = [
     "AIConfigResponse",
     "AIConfigUpdateRequest",
@@ -552,6 +594,10 @@ __all__ = [
     "DepartmentsListResponse",
     "FrameworkResponse",
     "FrameworksListResponse",
+    "HarmonizationBusinessCaseEntry",
+    "HarmonizationNetView",
+    "HarmonizationPutRequest",
+    "HarmonizationResponse",
     "HealthzResponse",
     "LoginDepartment",
     "LoginResponse",

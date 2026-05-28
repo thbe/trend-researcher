@@ -44,6 +44,7 @@ from api.routes import departments as departments_routes
 from api.routes import department_pats as department_pats_routes
 from api.routes import department_sources as department_sources_routes
 from api.routes import frameworks as frameworks_routes
+from api.routes import harmonization as harmonization_routes
 
 
 @asynccontextmanager
@@ -90,6 +91,7 @@ app.include_router(departments_routes.router, prefix="/api")
 app.include_router(frameworks_routes.router, prefix="/api")
 app.include_router(department_pats_routes.router, prefix="/api")
 app.include_router(department_sources_routes.router, prefix="/api")
+app.include_router(harmonization_routes.router, prefix="/api")
 app.include_router(internal_routes.router, prefix="/api")
 
 # Auth middleware: protects all /api/* except /api/login and /api/healthz

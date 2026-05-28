@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-in-progress
-stopped_at: "Plan 10-04 code complete (T01–T08 all committed locally, 9 commits ahead of origin/main). Operator gate: confirm before push, then proceed to plan 10-05 (harmonization)."
-last_updated: "2026-05-28T17:00:00.000Z"
-last_activity: "Phase 10 plan 10-04 T08 — vitest harness + session/switcher/swot tests + case→bcase reserved-word fix committed (2fcc3fa)"
+status: milestone-complete
+stopped_at: "Phase 10 plan 10-05 complete — all 32/32 plans shipped. Milestone v1.0 done."
+last_updated: "2026-05-28T21:00:00.000Z"
+last_activity: "Phase 10 plan 10-05 T08 — harmonization migration + API + SPA + tests + docs closeout"
 progress:
   total_phases: 10
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 32
-  completed_plans: 31
-  percent: 97
+  completed_plans: 32
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 
 ## Current Position
 
-Phase: 10 of 10 — IN PROGRESS. Plans 10-00..10-04 complete; 10-05 next.
-Plan: 10-04 — Frontend multi-tenant SPA shell (T01–T08 all committed locally, 9 commits ahead of origin/main; awaiting operator gate to push).
-Status: Multi-tenant platform backend complete (depts, RBAC, frameworks). Frontend shell complete (10-04). Harmonization (10-05) remains.
-Last activity: 2026-05-28 — 10-04 T08 (vitest harness + session/switcher/swot tests + `case`→`bcase` reserved-word fix) committed as `2fcc3fa`. 26/26 tests pass; typecheck + build clean.
+Phase: 10 of 10 — COMPLETE. All plans 10-00..10-05 shipped.
+Plan: 10-05 — Topic Harmonization + Phase 10 closeout (migration, API, SPA, tests, docs).
+Status: Milestone v1.0 complete. All 32 plans across 10 phases delivered.
+Last activity: 2026-05-28 — 10-05 T08 (harmonization layer + architecture docs + closeout).
 
-Progress: [█████████░] 97% (31 of 32 plans — Phase 1=5/5, Phase 2=4/4, Phase 3=5/5, Phase 4=6/6, Phase 4.5=1/1, Phase 4.5.1=1/1, Phase 5=1/1, Phase 6=1/1, Phase 7=1/1, Phase 8=1/1, Phase 9 superseded, Phase 10=5/6)
+Progress: [██████████] 100% (32 of 32 plans — Phase 1=5/5, Phase 2=4/4, Phase 3=5/5, Phase 4=6/6, Phase 4.5=1/1, Phase 4.5.1=1/1, Phase 5=1/1, Phase 6=1/1, Phase 7=1/1, Phase 8=1/1, Phase 9 superseded, Phase 10=6/6)
 
 ## Performance Metrics
 
@@ -82,5 +82,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-05-28
-Stopped at: "Plan 10-04 code complete (T01–T08 all committed: 9 commits ahead of origin/main, NOT pushed). Operator gate: confirm before push, then proceed to plan 10-05 (harmonization + closeout)."
-Resume file: .planning/phases/10-multi-tenant-platform/10-05-PLAN.md
+Stopped at: "Milestone v1.0 complete — all 32/32 plans shipped across 10 phases."
+Resume file: N/A (milestone complete)

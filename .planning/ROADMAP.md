@@ -235,12 +235,12 @@ Plans:
   6. ARC-001 preserved — no AI code path in crawler or in any `department_sources` resolution; verified by grep.
 
 Plans:
-- [ ] 10-00 (W0): Roadmap & STATE sync + REQUIREMENTS update for Phase 10 (autonomous)
-- [ ] 10-01 (W1, deps: 10-00, **autonomous=false**): Departments + users.is_superadmin + user_departments migration + ORM + RBAC dep + departments CRUD + seed Default dept + tests
-- [ ] 10-02 (W2, deps: 10-01, **autonomous=false**): department_sources + scope ai_config/business_cases/assessment_jobs per dept + crawler union-of-dept-sources + SPA header stub + tests
-- [x] 10-03 (W3, deps: 10-02, **autonomous=false**): assessment_frameworks + department_frameworks + framework-aware assessor refactor + verdict-identity golden test + structured_output column + tests *(code complete; operator gate pending before applying migrations 0017+0018+0019 to prod)*
+- [x] 10-00 (W0): Roadmap & STATE sync + REQUIREMENTS update for Phase 10 (autonomous)
+- [x] 10-01 (W1, deps: 10-00, **autonomous=false**): Departments + users.is_superadmin + user_departments migration + ORM + RBAC dep + departments CRUD + seed Default dept + tests
+- [x] 10-02 (W2, deps: 10-01, **autonomous=false**): department_sources + scope ai_config/business_cases/assessment_jobs per dept + crawler union-of-dept-sources + SPA header stub + tests
+- [x] 10-03 (W3, deps: 10-02, **autonomous=false**): assessment_frameworks + department_frameworks + framework-aware assessor refactor + verdict-identity golden test + structured_output column + tests
 - [x] 10-04 (W4, deps: 10-03, autonomous): Frontend — Pinia stores, DepartmentSwitcher, role-gated nav, framework cards (Verdict/SWOT/PESTLE) + dispatcher, FrameworkPicker, settings views, OpenAPI codegen, strings.ts rename hook, router guards, tests
-- [ ] 10-05 (W5, deps: 10-04, autonomous): topic_harmonizations migration + endpoints + HarmonizationTab + NetViewEditor + ARCHITECTURE.md refresh + SUMMARY.md + ROADMAP/STATE/REQUIREMENTS closeout
+- [x] 10-05 (W5, deps: 10-04, autonomous): topic_harmonizations migration + endpoints + HarmonizationTab + NetViewEditor + ARCHITECTURE.md refresh + SUMMARY.md + ROADMAP/STATE/REQUIREMENTS closeout
 
 ## Progress
 
@@ -260,4 +260,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 4.5 → 4.5.1 → 5 →
 | 7. Business-Case Generation | 1/1 | Complete | 2026-05-20 |
 | 8. Assessment UI | 1/1 | Complete | 2026-05-20 |
 | 9. PoC Hardening & Observation Setup | 0/0 | Superseded | — |
-| 10. Multi-Tenant Market Intelligence Platform | 0/6 | In progress | — |
+| 10. Multi-Tenant Market Intelligence Platform | 6/6 | Complete | 2026-05-28 |

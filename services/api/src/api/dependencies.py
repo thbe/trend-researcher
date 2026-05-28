@@ -297,6 +297,35 @@ def require_role(
     return _dep
 
 
+async def require_can_harmonize(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> User:
+    """Dependency: user must be superadmin OR dept_lead in any department.
+
+    Used by the harmonization PUT/DELETE endpoints (MT-012). Unlike
+    ``require_role`` this does NOT require an active-department header —
+    harmonization is cross-department by design.
+    """
+
+    if current_user.is_superadmin:
+        return current_user
+
+    result = await session.execute(
+        select(UserDepartment).where(
+            UserDepartment.user_id == current_user.id,
+            UserDepartment.role == "dept_lead",
+        )
+    )
+    if result.first() is not None:
+        return current_user
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Harmonization write requires dept_lead role or superadmin",
+    )
+
+
 __all__ = [
     "ActiveDepartment",
     "dispose_engine",
@@ -304,5 +333,6 @@ __all__ = [
     "get_current_user",
     "get_session",
     "get_web_dist_dir",
+    "require_can_harmonize",
     "require_role",
 ]

@@ -90,6 +90,14 @@ class Topic(Base):
         passive_deletes=True,
     )
 
+    # Phase 10 (MT-012): optional cross-department Net View annotation.
+    harmonization: Mapped["TopicHarmonization | None"] = relationship(
+        back_populates="topic",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
+
 
 class TopicSource(Base):
     """One row per (topic, source, url, observed_at) observation.
@@ -798,4 +806,45 @@ class DepartmentFramework(Base):
     )
 
 
-__all__ = ["AIConfig", "AssessmentFramework", "AssessmentJob", "Base", "BusinessCase", "CrawlConfig", "CrawlRun", "Department", "DepartmentFramework", "DepartmentPAT", "DepartmentSource", "RoleLiteral", "Topic", "TopicSource", "User", "UserDepartment"]
+class TopicHarmonization(Base):
+    """Cross-department Net View annotation for a topic (Phase 10, MT-012).
+
+    One optional row per topic. A dept_lead (of any department) or superadmin
+    can author/update the free-text ``net_view`` — a meta-assessment that
+    synthesises the individual department business cases into a single
+    organisational perspective.
+
+    Read access: any logged-in user (cross-department visibility by design).
+    Write access: ``dept_lead`` of any department, or ``is_superadmin``.
+    Concurrency: last-write-wins (acceptable for v1 single-operator usage).
+    """
+
+    __tablename__ = "topic_harmonizations"
+
+    topic_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("topics.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    net_view: Mapped[str] = mapped_column(Text, nullable=False)
+    authored_by: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    authored_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+    updated_at: Mapped[str] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    topic: Mapped["Topic"] = relationship(back_populates="harmonization")
+    author: Mapped["User | None"] = relationship()
+
+
+__all__ = ["AIConfig", "AssessmentFramework", "AssessmentJob", "Base", "BusinessCase", "CrawlConfig", "CrawlRun", "Department", "DepartmentFramework", "DepartmentPAT", "DepartmentSource", "RoleLiteral", "Topic", "TopicHarmonization", "TopicSource", "User", "UserDepartment"]

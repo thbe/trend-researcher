@@ -8,6 +8,7 @@ import { formatLongevity, formatRelative } from '@/lib/format'
 import { useSessionStore } from '@/stores/session'
 import BusinessCaseCard from '@/components/BusinessCaseCard.vue'
 import FrameworkPicker from '@/components/FrameworkPicker.vue'
+import HarmonizationTab from '@/components/HarmonizationTab.vue'
 
 const props = defineProps<{ id: string }>()
 const router = useRouter()
@@ -113,6 +114,8 @@ async function runAssess() {
   }
 }
 
+const activeTab = ref('department')
+
 onMounted(load)
 watch(() => props.id, load)
 </script>
@@ -193,63 +196,76 @@ watch(() => props.id, load)
           </v-expansion-panel>
         </v-expansion-panels>
 
-        <div class="text-h6 mt-6 mb-2">
-          AI Assessment
-        </div>
+        <v-tabs v-model="activeTab" class="mt-6 mb-4">
+          <v-tab value="department">My Department</v-tab>
+          <v-tab value="harmonization">Cross-Department</v-tab>
+        </v-tabs>
 
-        <div class="d-flex align-center mb-3" style="gap: 12px">
-          <FrameworkPicker
-            v-model="selectedFrameworkId"
-            :disabled="assessing || !session.canAssess"
-            style="max-width: 280px"
-          />
-          <v-btn
-            color="primary"
-            prepend-icon="mdi-brain"
-            :loading="assessing"
-            :disabled="assessing || !session.canAssess"
-            @click="runAssess"
-          >
-            Assess Topic
-          </v-btn>
-          <span
-            v-if="!session.canAssess"
-            class="text-caption text-medium-emphasis"
-          >
-            Requires analyst role in the active department.
-          </span>
-        </div>
+        <v-tabs-window v-model="activeTab">
+          <v-tabs-window-item value="department">
+            <div class="text-h6 mb-2">
+              AI Assessment
+            </div>
 
-        <v-alert
-          v-if="assessError"
-          type="error"
-          variant="tonal"
-          density="comfortable"
-          class="mb-3"
-          :text="assessError"
-        />
+            <div class="d-flex align-center mb-3" style="gap: 12px">
+              <FrameworkPicker
+                v-model="selectedFrameworkId"
+                :disabled="assessing || !session.canAssess"
+                style="max-width: 280px"
+              />
+              <v-btn
+                color="primary"
+                prepend-icon="mdi-brain"
+                :loading="assessing"
+                :disabled="assessing || !session.canAssess"
+                @click="runAssess"
+              >
+                Assess Topic
+              </v-btn>
+              <span
+                v-if="!session.canAssess"
+                class="text-caption text-medium-emphasis"
+              >
+                Requires analyst role in the active department.
+              </span>
+            </div>
 
-        <!-- Preferred path: backend exposes per-dept business_cases on TopicDetail. -->
-        <div v-if="hasBusinessCases" class="d-flex flex-column" style="gap: 12px">
-          <BusinessCaseCard
-            v-for="bc in businessCases"
-            :key="bc.id"
-            :bcase="bc"
-          />
-        </div>
+            <v-alert
+              v-if="assessError"
+              type="error"
+              variant="tonal"
+              density="comfortable"
+              class="mb-3"
+              :text="assessError"
+            />
 
-        <!-- Fallback: legacy single-shot assess returned a BusinessCase-shaped object. -->
-        <BusinessCaseCard
-          v-else-if="inlineCase"
-          :bcase="inlineCase"
-        />
+            <!-- Preferred path: backend exposes per-dept business_cases on TopicDetail. -->
+            <div v-if="hasBusinessCases" class="d-flex flex-column" style="gap: 12px">
+              <BusinessCaseCard
+                v-for="bc in businessCases"
+                :key="bc.id"
+                :bcase="bc"
+              />
+            </div>
 
-        <!-- Last-resort fallback: server returned an opaque payload. -->
-        <v-card v-else-if="assessResult" variant="outlined" class="mb-4">
-          <v-card-text>
-            <pre class="text-caption" style="white-space: pre-wrap">{{ JSON.stringify(assessResult, null, 2) }}</pre>
-          </v-card-text>
-        </v-card>
+            <!-- Fallback: legacy single-shot assess returned a BusinessCase-shaped object. -->
+            <BusinessCaseCard
+              v-else-if="inlineCase"
+              :bcase="inlineCase"
+            />
+
+            <!-- Last-resort fallback: server returned an opaque payload. -->
+            <v-card v-else-if="assessResult" variant="outlined" class="mb-4">
+              <v-card-text>
+                <pre class="text-caption" style="white-space: pre-wrap">{{ JSON.stringify(assessResult, null, 2) }}</pre>
+              </v-card-text>
+            </v-card>
+          </v-tabs-window-item>
+
+          <v-tabs-window-item value="harmonization">
+            <HarmonizationTab :topic-id="props.id" />
+          </v-tabs-window-item>
+        </v-tabs-window>
 
         <div class="text-h6 mt-6 mb-2">
           Sources ({{ topic.sources.length }})
