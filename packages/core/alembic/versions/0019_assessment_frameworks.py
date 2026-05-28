@@ -227,7 +227,7 @@ def _seed_frameworks(conn) -> None:
               (id, key, name, description, display_component,
                json_schema, prompt_version)
             VALUES
-              (:id, :key, :name, :description, :display_component,
+              (CAST(:id AS uuid), :key, :name, :description, :display_component,
                (:json_schema)::jsonb, :prompt_version)
             """
         ),
@@ -360,7 +360,7 @@ def upgrade() -> None:
         sa.text(
             """
             UPDATE business_cases
-            SET framework_id = :fw_id,
+            SET framework_id = CAST(:fw_id AS uuid),
                 structured_output = COALESCE(
                     raw_response,
                     jsonb_build_object(
@@ -444,7 +444,7 @@ def upgrade() -> None:
         sa.text(
             """
             UPDATE assessment_jobs
-            SET framework_id = :fw_id
+            SET framework_id = CAST(:fw_id AS uuid)
             WHERE framework_id IS NULL
             """
         ).bindparams(fw_id=VERDICT_FRAMEWORK_ID)

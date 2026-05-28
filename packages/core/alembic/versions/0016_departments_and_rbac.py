@@ -137,7 +137,7 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             "INSERT INTO departments (id, name, slug, description) "
-            "VALUES (:id, 'Default', 'default', "
+            "VALUES (CAST(:id AS uuid), 'Default', 'default', "
             "'Auto-created default department from single-tenant migration.')"
         ).bindparams(id=DEFAULT_DEPARTMENT_ID)
     )
@@ -152,7 +152,7 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             "INSERT INTO user_departments (user_id, department_id, role) "
-            "SELECT id, :dept_id, 'dept_lead' FROM users"
+            "SELECT id, CAST(:dept_id AS uuid), 'dept_lead' FROM users"
         ).bindparams(dept_id=DEFAULT_DEPARTMENT_ID)
     )
 

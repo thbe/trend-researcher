@@ -131,7 +131,7 @@ def upgrade() -> None:
         sa.text(
             """
             INSERT INTO department_sources (department_id, source_name, enabled)
-            SELECT :dept_id, source_name, enabled FROM crawl_config
+            SELECT CAST(:dept_id AS uuid), source_name, enabled FROM crawl_config
             """
         ).bindparams(dept_id=DEFAULT_DEPARTMENT_ID)
     )
@@ -190,7 +190,7 @@ def upgrade() -> None:
                 request_timeout_seconds, updated_at
             )
             SELECT
-                :dept_id, base_url, model, api_token, business_context,
+                CAST(:dept_id AS uuid), base_url, model, api_token, business_context,
                 opportunity_criteria, risk_criteria, thinking_effort,
                 request_timeout_seconds, updated_at
             FROM ai_config WHERE key = 'default'
@@ -212,7 +212,7 @@ def upgrade() -> None:
     )
     op.execute(
         sa.text(
-            "UPDATE business_cases SET department_id = :dept_id"
+            "UPDATE business_cases SET department_id = CAST(:dept_id AS uuid)"
         ).bindparams(dept_id=DEFAULT_DEPARTMENT_ID)
     )
     op.alter_column("business_cases", "department_id", nullable=False)
@@ -234,7 +234,7 @@ def upgrade() -> None:
     )
     op.execute(
         sa.text(
-            "UPDATE assessment_jobs SET department_id = :dept_id"
+            "UPDATE assessment_jobs SET department_id = CAST(:dept_id AS uuid)"
         ).bindparams(dept_id=DEFAULT_DEPARTMENT_ID)
     )
     op.alter_column("assessment_jobs", "department_id", nullable=False)
@@ -310,7 +310,7 @@ def downgrade() -> None:
                 opportunity_criteria, risk_criteria, thinking_effort,
                 request_timeout_seconds, updated_at
             FROM ai_config
-            ORDER BY (department_id = :dept_id) DESC
+            ORDER BY (department_id = CAST(:dept_id AS uuid)) DESC
             LIMIT 1
             """
         ).bindparams(dept_id=DEFAULT_DEPARTMENT_ID)
@@ -336,7 +336,7 @@ def downgrade() -> None:
             SET enabled = ds.enabled
             FROM department_sources ds
             WHERE ds.source_name = cc.source_name
-              AND ds.department_id = :dept_id
+              AND ds.department_id = CAST(:dept_id AS uuid)
             """
         ).bindparams(dept_id=DEFAULT_DEPARTMENT_ID)
     )

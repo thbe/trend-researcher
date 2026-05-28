@@ -71,6 +71,7 @@ if [ -z "${DATABASE_URL:-}" ] || [ "${DATABASE_URL:-}" = "embedded" ]; then
   # Configure PostgreSQL for local connections
   echo "local all all trust" > "$PG_DATA/pg_hba.conf"
   echo "host all all 127.0.0.1/32 md5" >> "$PG_DATA/pg_hba.conf"
+  echo "host all all ::1/128 md5" >> "$PG_DATA/pg_hba.conf"
 
   # Start PostgreSQL
   su - postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D $PG_DATA -l $PG_LOG start -w -t 30"
