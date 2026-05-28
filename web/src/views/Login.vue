@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useSessionStore, type LoginPayload } from '@/stores/session'
 
 const router = useRouter()
+const route = useRoute()
 const session = useSessionStore()
 const username = ref('')
 const password = ref('')
@@ -26,7 +27,15 @@ async function handleLogin() {
     }
     const body = (await res.json().catch(() => ({}))) as LoginPayload
     session.applyLoginResponse(body)
-    router.push({ name: 'dashboard' })
+    // Honour ?redirect=… set by the router guard when an unauth user hit
+    // a protected route. Only accept same-origin relative paths to avoid
+    // open-redirect abuse via crafted query strings.
+    const redirect = route.query.redirect
+    if (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) {
+      router.push(redirect)
+    } else {
+      router.push({ name: 'dashboard' })
+    }
   } catch (e: any) {
     error.value = e.message || 'Network error'
   } finally {
