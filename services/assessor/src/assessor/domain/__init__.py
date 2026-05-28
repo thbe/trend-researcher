@@ -1,6 +1,6 @@
-"""Assessor domain — prompt templates and assessment pipeline."""
+"""Assessor domain — frameworks, prompts, and the assessment pipeline."""
 
-from assessor.domain.prompts import RETAIL_RELEVANCE_PROMPT, PROMPT_VERSION
 from assessor.domain.pipeline import AssessmentPipeline
+from assessor.domain.prompts import PROMPT_VERSION, RETAIL_RELEVANCE_PROMPT
 
 __all__ = ["AssessmentPipeline", "PROMPT_VERSION", "RETAIL_RELEVANCE_PROMPT"]

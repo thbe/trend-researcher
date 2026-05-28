@@ -1,4 +1,10 @@
-"""Composition root — wires adapters to the assessment pipeline."""
+"""Composition root — wires adapters to the assessment pipeline.
+
+CLI path: targets the seeded Default department so ``uv run ... assessor
+assess`` works without an HTTP request context. API code does NOT use this
+factory — it builds per-request, per-dept pipelines in
+``services/api/src/api/routes/assessment.py``.
+"""
 
 from __future__ import annotations
 
@@ -9,8 +15,15 @@ from assessor.adapters.openai_adapter import OpenAIAdapter
 from assessor.adapters.postgres_rag import PostgresRAGAdapter
 from assessor.domain.pipeline import AssessmentPipeline
 
+# Mirrors packages/core/alembic/versions/0017_*.py — Default dept seeded UUID.
+DEFAULT_DEPARTMENT_ID = "00000000-0000-0000-0000-000000000001"
 
-def build_pipeline() -> tuple[AssessmentPipeline, "AsyncEngine"]:
+
+def build_pipeline(
+    *,
+    department_id: str = DEFAULT_DEPARTMENT_ID,
+    framework_key: str = "verdict",
+) -> tuple[AssessmentPipeline, "AsyncEngine"]:
     """Build the full assessment pipeline from settings.
 
     Returns (pipeline, engine) — caller must dispose engine when done.
@@ -44,7 +57,9 @@ def build_pipeline() -> tuple[AssessmentPipeline, "AsyncEngine"]:
         llm=llm,
         rag=rag,
         session_factory=session_factory,
+        department_id=department_id,
         model_id=settings.llm_model,
+        default_framework_key=framework_key,
     )
 
     return pipeline, engine
