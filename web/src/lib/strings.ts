@@ -30,8 +30,7 @@ export const STRINGS = {
   NAV_AI_CONFIG: 'AI Config',
   NAV_SOURCE_SUBSCRIPTIONS: 'Source Subscriptions',
   NAV_FRAMEWORK_SETTINGS: 'Framework Settings',
-  NAV_USERS: 'Users',
-  NAV_DEPARTMENTS: 'Departments',
+  NAV_ADMIN: 'Admin',
   NAV_CRAWL_CONFIG: 'Crawl Config',
 
   // Buttons / key labels

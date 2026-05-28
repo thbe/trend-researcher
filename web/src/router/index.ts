@@ -95,23 +95,23 @@ const routes: RouteRecordRaw[] = [
     meta: { superadminOnly: true },
   },
   {
-    path: '/users',
-    name: 'users',
-    component: () => import('@/views/Users.vue'),
+    path: '/admin',
+    name: 'admin',
+    component: () => import('@/views/Admin.vue'),
     meta: { superadminOnly: true },
+  },
+  {
+    // Legacy routes redirect to unified admin view
+    path: '/users',
+    redirect: { name: 'admin' },
   },
   {
     path: '/departments',
-    name: 'departments',
-    component: () => import('@/views/Departments.vue'),
-    meta: { superadminOnly: true },
+    redirect: { name: 'admin' },
   },
   {
     path: '/departments/:id/settings',
-    name: 'department-settings',
-    component: () => import('@/views/DepartmentSettings.vue'),
-    props: true,
-    meta: { superadminOnly: true },
+    redirect: { name: 'admin' },
   },
 ]
 
