@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: phase-in-progress
-stopped_at: "Plan 10-03 code complete (T01–T09 all committed). Operator gate: confirm before applying migrations 0017+0018+0019 to prod."
-last_updated: "2026-05-28T00:00:00.000Z"
-last_activity: "Phase 10 plan 10-03 — frameworks API + dept default-framework lookup + tests (T08+T09) committed"
+stopped_at: "Plan 10-04 code complete (T01–T08 all committed locally, 9 commits ahead of origin/main). Operator gate: confirm before push, then proceed to plan 10-05 (harmonization)."
+last_updated: "2026-05-28T17:00:00.000Z"
+last_activity: "Phase 10 plan 10-04 T08 — vitest harness + session/switcher/swot tests + case→bcase reserved-word fix committed (2fcc3fa)"
 progress:
   total_phases: 10
   completed_phases: 9
   total_plans: 32
-  completed_plans: 30
-  percent: 94
+  completed_plans: 31
+  percent: 97
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 
 ## Current Position
 
-Phase: 10 of 10 — IN PROGRESS. Plans 10-00..10-03 complete; 10-04 next.
-Plan: 10-03 — frameworks API, dept default-framework lookup, structured business cases (T01–T09 all committed; awaiting operator gate to apply migrations 0017+0018+0019 to prod).
-Status: Multi-tenant platform backend complete (depts, RBAC, frameworks). Frontend (10-04) and harmonization (10-05) remain.
-Last activity: 2026-05-28 — 10-03 T08 (frameworks endpoints + dept default-framework resolution + structured BC response) and T09 (9 endpoint tests) committed as `dad01f9` + `8e5e722`.
+Phase: 10 of 10 — IN PROGRESS. Plans 10-00..10-04 complete; 10-05 next.
+Plan: 10-04 — Frontend multi-tenant SPA shell (T01–T08 all committed locally, 9 commits ahead of origin/main; awaiting operator gate to push).
+Status: Multi-tenant platform backend complete (depts, RBAC, frameworks). Frontend shell complete (10-04). Harmonization (10-05) remains.
+Last activity: 2026-05-28 — 10-04 T08 (vitest harness + session/switcher/swot tests + `case`→`bcase` reserved-word fix) committed as `2fcc3fa`. 26/26 tests pass; typecheck + build clean.
 
-Progress: [█████████░] 94% (30 of 32 plans — Phase 1=5/5, Phase 2=4/4, Phase 3=5/5, Phase 4=6/6, Phase 4.5=1/1, Phase 4.5.1=1/1, Phase 5=1/1, Phase 6=1/1, Phase 7=1/1, Phase 8=1/1, Phase 9 superseded, Phase 10=4/6)
+Progress: [█████████░] 97% (31 of 32 plans — Phase 1=5/5, Phase 2=4/4, Phase 3=5/5, Phase 4=6/6, Phase 4.5=1/1, Phase 4.5.1=1/1, Phase 5=1/1, Phase 6=1/1, Phase 7=1/1, Phase 8=1/1, Phase 9 superseded, Phase 10=5/6)
 
 ## Performance Metrics
 
@@ -82,5 +82,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-05-28
-Stopped at: "Plan 10-03 code complete (T01–T09 all committed: 8 commits ahead of origin/main, NOT pushed). Operator gate: confirm before applying migrations 0017+0018+0019 to prod, then proceed to plan 10-04 (frontend)."
-Resume file: .planning/phases/10-multi-tenant-platform/10-04-PLAN.md
+Stopped at: "Plan 10-04 code complete (T01–T08 all committed: 9 commits ahead of origin/main, NOT pushed). Operator gate: confirm before push, then proceed to plan 10-05 (harmonization + closeout)."
+Resume file: .planning/phases/10-multi-tenant-platform/10-05-PLAN.md
