@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useSessionStore, type LoginPayload } from '@/stores/session'
 
 const router = useRouter()
+const session = useSessionStore()
 const username = ref('')
 const password = ref('')
 const loading = ref(false)
@@ -22,16 +24,8 @@ async function handleLogin() {
       error.value = body.detail || `Login failed (${res.status})`
       return
     }
-    const body = await res.json().catch(() => ({} as any))
-    if (
-      typeof localStorage !== 'undefined' &&
-      !localStorage.getItem('activeDepartment') &&
-      Array.isArray(body?.departments) &&
-      body.departments.length > 0 &&
-      body.departments[0]?.id
-    ) {
-      localStorage.setItem('activeDepartment', body.departments[0].id)
-    }
+    const body = (await res.json().catch(() => ({}))) as LoginPayload
+    session.applyLoginResponse(body)
     router.push({ name: 'dashboard' })
   } catch (e: any) {
     error.value = e.message || 'Network error'
