@@ -8,6 +8,8 @@
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "gen:api": "node scripts/gen-api-types.mjs",
     "predev": "node scripts/gen-api-types.mjs --if-server-up",
     "prebuild": "node scripts/gen-api-types.mjs --if-server-up"
@@ -23,10 +25,14 @@
   "devDependencies": {
     "@types/node": "^22.10.1",
     "@vitejs/plugin-vue": "^6.0.7",
+    "@vitest/coverage-v8": "^4.1.7",
+    "@vue/test-utils": "^2.4.10",
+    "jsdom": "^29.1.1",
     "openapi-typescript": "^7.4.4",
     "typescript": "^5.7.2",
     "vite": "^7.3.3",
     "vite-plugin-vuetify": "^2.0.4",
+    "vitest": "^4.1.7",
     "vue-tsc": "^2.1.10"
   }
 }

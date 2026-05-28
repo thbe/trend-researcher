@@ -2,14 +2,14 @@
 import { computed } from 'vue'
 import type { BusinessCase } from '@/api/assessment'
 
-const props = defineProps<{ case: BusinessCase }>()
+const props = defineProps<{ bcase: BusinessCase }>()
 
 interface SwotEntry {
   point: string
   rationale: string
 }
 
-const so = computed(() => props.case.structured_output ?? {})
+const so = computed(() => props.bcase.structured_output ?? {})
 
 function cell(key: 'strengths' | 'weaknesses' | 'opportunities' | 'threats'): SwotEntry[] {
   const v = (so.value as Record<string, unknown>)[key]
@@ -22,16 +22,16 @@ const opportunities = computed(() => cell('opportunities'))
 const threats = computed(() => cell('threats'))
 
 const verdict = computed(
-  () => ((so.value as any).verdict as string) ?? props.case.relevance_verdict ?? 'unknown',
+  () => ((so.value as any).verdict as string) ?? props.bcase.relevance_verdict ?? 'unknown',
 )
 const importance = computed(
-  () => ((so.value as any).importance as number | null) ?? props.case.importance ?? null,
+  () => ((so.value as any).importance as number | null) ?? props.bcase.importance ?? null,
 )
 const confidence = computed(
-  () => ((so.value as any).confidence as number | null) ?? props.case.confidence ?? null,
+  () => ((so.value as any).confidence as number | null) ?? props.bcase.confidence ?? null,
 )
 const reason = computed(
-  () => ((so.value as any).reason as string) ?? props.case.relevance_reason ?? '',
+  () => ((so.value as any).reason as string) ?? props.bcase.relevance_reason ?? '',
 )
 
 const verdictColor = computed(() =>
@@ -65,9 +65,9 @@ const cellsByKey = computed(() => ({
         <v-chip :color="verdictColor" size="small" label>{{ verdict }}</v-chip>
       </template>
       <v-card-title class="text-subtitle-1">
-        {{ case.framework?.name ?? 'SWOT' }}
+        {{ bcase.framework?.name ?? 'SWOT' }}
       </v-card-title>
-      <v-card-subtitle>{{ case.model_used }} · {{ case.prompt_version }}</v-card-subtitle>
+      <v-card-subtitle>{{ bcase.model_used }} · {{ bcase.prompt_version }}</v-card-subtitle>
       <template #append>
         <v-chip v-if="importance != null" size="small" variant="tonal" class="mr-2">
           Importance {{ importance }}

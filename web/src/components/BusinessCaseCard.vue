@@ -5,7 +5,10 @@
 import { computed, defineAsyncComponent, type Component } from 'vue'
 import type { BusinessCase } from '@/api/assessment'
 
-const props = defineProps<{ case: BusinessCase }>()
+// NOTE: prop is `bcase` (not `case`) because `case` is a JS reserved word
+// that Vue's SFC compiler refuses inside template interpolation expressions
+// like `{{ case.foo }}`. vue-tsc is lenient, but `vite build` is not.
+const props = defineProps<{ bcase: BusinessCase }>()
 
 const cardRegistry: Record<string, Component> = {
   VerdictCard: defineAsyncComponent(() => import('@/components/cards/VerdictCard.vue')),
@@ -14,7 +17,7 @@ const cardRegistry: Record<string, Component> = {
 }
 
 const componentName = computed(
-  () => props.case.framework?.display_component ?? 'VerdictCard',
+  () => props.bcase.framework?.display_component ?? 'VerdictCard',
 )
 
 const resolved = computed<Component | null>(() => {
@@ -30,17 +33,17 @@ const resolved = computed<Component | null>(() => {
   return c
 })
 
-const rawJson = computed(() => JSON.stringify(props.case.structured_output ?? {}, null, 2))
+const rawJson = computed(() => JSON.stringify(props.bcase.structured_output ?? {}, null, 2))
 </script>
 
 <template>
-  <component :is="resolved" v-if="resolved" :case="case" />
+  <component :is="resolved" v-if="resolved" :bcase="bcase" />
   <v-card v-else variant="outlined">
     <v-card-item>
       <v-card-title class="text-subtitle-1">
         Unknown framework: {{ componentName }}
       </v-card-title>
-      <v-card-subtitle>{{ case.model_used }} · {{ case.prompt_version }}</v-card-subtitle>
+      <v-card-subtitle>{{ bcase.model_used }} · {{ bcase.prompt_version }}</v-card-subtitle>
     </v-card-item>
     <v-card-text>
       <v-expansion-panels>

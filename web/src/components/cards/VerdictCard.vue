@@ -2,10 +2,10 @@
 import { computed } from 'vue'
 import type { BusinessCase } from '@/api/assessment'
 
-const props = defineProps<{ case: BusinessCase }>()
+const props = defineProps<{ bcase: BusinessCase }>()
 
 // Prefer structured_output; fall back to denormalised top-level fields.
-const so = computed(() => props.case.structured_output ?? {})
+const so = computed(() => props.bcase.structured_output ?? {})
 
 function pick<T = unknown>(key: string, fallback: T): T {
   const v = (so.value as Record<string, unknown>)[key]
@@ -13,19 +13,19 @@ function pick<T = unknown>(key: string, fallback: T): T {
 }
 
 const verdict = computed(() =>
-  pick<string>('verdict', props.case.relevance_verdict ?? 'unknown'),
+  pick<string>('verdict', props.bcase.relevance_verdict ?? 'unknown'),
 )
-const reason = computed(() => pick<string>('reason', props.case.relevance_reason ?? ''))
+const reason = computed(() => pick<string>('reason', props.bcase.relevance_reason ?? ''))
 const reasoning = computed(() => pick<string | null>('reasoning', null))
 const category = computed(() =>
-  pick<string | null>('category', props.case.category ?? null),
+  pick<string | null>('category', props.bcase.category ?? null),
 )
-const importance = computed(() => pick<number | null>('importance', props.case.importance ?? null))
+const importance = computed(() => pick<number | null>('importance', props.bcase.importance ?? null))
 const investmentBand = computed(() =>
-  pick<string | null>('investment_band', props.case.investment_band ?? null),
+  pick<string | null>('investment_band', props.bcase.investment_band ?? null),
 )
 const confidence = computed(() =>
-  pick<number | null>('confidence', props.case.confidence ?? null),
+  pick<number | null>('confidence', props.bcase.confidence ?? null),
 )
 
 const verdictColor = computed(() =>
@@ -52,10 +52,10 @@ const categoryColor = computed(() => {
         <v-chip :color="verdictColor" size="small" label>{{ verdict }}</v-chip>
       </template>
       <v-card-title class="text-subtitle-1">
-        {{ case.framework?.name ?? 'Relevance Verdict' }}
+        {{ bcase.framework?.name ?? 'Relevance Verdict' }}
       </v-card-title>
       <v-card-subtitle>
-        {{ case.model_used }} · {{ case.prompt_version }}
+        {{ bcase.model_used }} · {{ bcase.prompt_version }}
       </v-card-subtitle>
       <template #append>
         <v-chip v-if="category" :color="categoryColor" size="small" variant="tonal" class="mr-2">

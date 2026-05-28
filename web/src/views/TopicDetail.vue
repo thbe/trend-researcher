@@ -234,14 +234,14 @@ watch(() => props.id, load)
           <BusinessCaseCard
             v-for="bc in businessCases"
             :key="bc.id"
-            :case="bc"
+            :bcase="bc"
           />
         </div>
 
         <!-- Fallback: legacy single-shot assess returned a BusinessCase-shaped object. -->
         <BusinessCaseCard
           v-else-if="inlineCase"
-          :case="inlineCase"
+          :bcase="inlineCase"
         />
 
         <!-- Last-resort fallback: server returned an opaque payload. -->
