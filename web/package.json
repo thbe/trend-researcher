@@ -7,11 +7,15 @@
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit",
+    "gen:api": "node scripts/gen-api-types.mjs",
+    "predev": "node scripts/gen-api-types.mjs --if-server-up",
+    "prebuild": "node scripts/gen-api-types.mjs --if-server-up"
   },
   "dependencies": {
     "@fontsource/roboto": "^5.1.0",
     "@mdi/font": "^7.4.47",
+    "pinia": "^2.3.0",
     "vue": "^3.5.13",
     "vue-router": "^4.4.5",
     "vuetify": "^3.7.5"
@@ -19,6 +23,7 @@
   "devDependencies": {
     "@types/node": "^22.10.1",
     "@vitejs/plugin-vue": "^6.0.7",
+    "openapi-typescript": "^7.4.4",
     "typescript": "^5.7.2",
     "vite": "^7.3.3",
     "vite-plugin-vuetify": "^2.0.4",

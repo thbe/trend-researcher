@@ -56,6 +56,52 @@ npm run typecheck      # vue-tsc --noEmit (strict)
 Run before every commit. `vue-tsc` validates `<script setup lang="ts">`
 blocks across `.vue`, `.ts`, and `.tsx` files.
 
+## Frontend dev loop (multi-tenant SPA — Phase 10)
+
+The SPA uses **Pinia** for cross-component state (session, active
+department, frameworks) and consumes **OpenAPI-typed** schemas generated
+from the FastAPI service.
+
+```bash
+npm run gen:api        # fetch http://localhost:8000/openapi.json
+                       # -> src/api/generated/api.ts (git-ignored)
+```
+
+Re-run `gen:api` after any backend schema or route change so call-site
+types stay in sync. The runtime API client (`src/api/client.ts`) is
+hand-written; the generated file is consumed where compile-time safety
+matters (incremental adoption — full migration is a Phase 11 candidate).
+
+`npm run dev` invokes `gen:api --if-server-up` automatically (predev
+hook). If the API isn't running yet, codegen logs a warning, leaves any
+previously generated file in place, and proceeds — local boot is never
+blocked by a cold backend. The same soft mode runs on `prebuild` so
+container builds (which can't reach the API) succeed against the last
+committed stub or generated file.
+
+Set `OPENAPI_URL` to point codegen at a different host:
+
+```bash
+OPENAPI_URL=https://api.staging.example.com/openapi.json npm run gen:api
+```
+
+### State stores
+
+| Store                  | Purpose                                                   |
+| ---------------------- | --------------------------------------------------------- |
+| `stores/session.ts`    | Logged-in user, departments, active dept id, active role  |
+| `stores/frameworks.ts` | System framework catalog + per-dept enabled set + default |
+
+Pinia is installed in `main.ts` **before** the router and Vuetify so that
+router guards and component `setup()` can call `useSessionStore()` etc.
+without `getActivePinia()` warnings.
+
+### Rename hook (G8)
+
+Every product-name UI string ("Trend Researcher", "Retail", page
+titles) is funnelled through `src/lib/strings.ts`. To rename the product,
+edit that one file. See its top-of-file comment.
+
 ## Routes
 
 | Path             | Component         | Notes                                |
