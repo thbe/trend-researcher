@@ -45,7 +45,13 @@ from api.schemas import (
     MembersListResponse,
     MemberUpdate,
 )
-from core.models import Department, User, UserDepartment
+from core.models import (
+    AssessmentFramework,
+    Department,
+    DepartmentFramework,
+    User,
+    UserDepartment,
+)
 
 router = APIRouter()
 
@@ -173,6 +179,29 @@ async def create_department(
             detail="Department with this name or slug already exists",
         ) from exc
     await session.refresh(dept)
+
+    # Phase 10 / plan 10-03 T08: auto-enable all seeded assessment frameworks
+    # for the new dept, with ``verdict`` flagged as the default. Keeps
+    # new-dept UX zero-config — dept_leads can prune later via
+    # ``PUT /api/frameworks/mine``.
+    fw_rows = (
+        await session.execute(
+            select(AssessmentFramework.id, AssessmentFramework.key).where(
+                AssessmentFramework.key.in_(("verdict", "swot", "pestle"))
+            )
+        )
+    ).all()
+    for fw_id, fw_key in fw_rows:
+        session.add(
+            DepartmentFramework(
+                department_id=dept.id,
+                framework_id=fw_id,
+                is_default=(fw_key == "verdict"),
+            )
+        )
+    if fw_rows:
+        await session.commit()
+
     return DepartmentResponse.model_validate(dept)
 
 

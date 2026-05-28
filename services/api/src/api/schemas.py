@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Phase 10 (MT-002): RBAC role literal — mirrors ``core.models.RoleLiteral``
 # but redeclared here so this module has zero import-time dependency on the
@@ -438,13 +438,108 @@ class DepartmentPATsListResponse(BaseModel):
     total: int
 
 
+# ---------------------------------------------------------------------------
+# Phase 10 (plan 10-03, MT-010): Assessment frameworks
+# ---------------------------------------------------------------------------
+
+
+class FrameworkResponse(BaseModel):
+    """One ``assessment_frameworks`` row as JSON (lean — no ``json_schema``).
+
+    The full JSON Schema is intentionally omitted (large + verbose); a
+    follow-up ``GET /api/frameworks/{id}/schema`` endpoint can expose it
+    when the UI needs validation hints client-side.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    key: str
+    name: str
+    description: str | None
+    display_component: str
+    prompt_version: str
+
+
+class FrameworksListResponse(BaseModel):
+    """Wrapper for ``GET /api/frameworks``."""
+
+    frameworks: list[FrameworkResponse]
+    total: int
+
+
+class DepartmentFrameworkResponse(BaseModel):
+    """Framework enabled for the active department, with ``is_default`` flag."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    key: str
+    name: str
+    description: str | None
+    display_component: str
+    prompt_version: str
+    is_default: bool
+
+
+class DepartmentFrameworksListResponse(BaseModel):
+    """Wrapper for ``GET /api/frameworks/mine``."""
+
+    frameworks: list[DepartmentFrameworkResponse]
+    total: int
+
+
+class DepartmentFrameworksUpdate(BaseModel):
+    """Body for ``PUT /api/frameworks/mine``.
+
+    Replaces the active dept's ``department_frameworks`` rows in one
+    transaction. The server validates ``default ∈ enabled`` and that every
+    ``enabled`` id exists in ``assessment_frameworks``.
+    """
+
+    enabled: list[UUID] = Field(..., min_length=1)
+    default: UUID
+
+    @model_validator(mode="after")
+    def _default_must_be_enabled(self) -> "DepartmentFrameworksUpdate":
+        if self.default not in self.enabled:
+            raise ValueError("default framework must be in the enabled list")
+        return self
+
+
+class AssessBatchRequest(BaseModel):
+    """Optional body for ``POST /api/assess``.
+
+    ``framework_id`` omitted ⇒ use the active dept's default framework.
+    Supplied ⇒ must be in the dept's enabled set (else 422).
+    """
+
+    framework_id: UUID | None = None
+    limit: int = Field(20, ge=1, le=500)
+
+
+class AssessSingleRequest(BaseModel):
+    """Optional body for ``POST /api/assess/{topic_id}``.
+
+    ``framework_id`` omitted ⇒ use the active dept's default framework.
+    Supplied ⇒ must be in the dept's enabled set (else 422).
+    """
+
+    framework_id: UUID | None = None
+
+
 __all__ = [
-    "CrawlConfigResponse",
     "AIConfigResponse",
     "AIConfigUpdateRequest",
+    "AssessBatchRequest",
+    "AssessSingleRequest",
     "CrawlConfigCreateRequest",
+    "CrawlConfigResponse",
     "CrawlConfigUpdateRequest",
     "DepartmentCreate",
+    "DepartmentFrameworkResponse",
+    "DepartmentFrameworksListResponse",
+    "DepartmentFrameworksUpdate",
     "DepartmentPATCreate",
     "DepartmentPATCreateResponse",
     "DepartmentPATResponse",
@@ -455,6 +550,8 @@ __all__ = [
     "DepartmentSourcesListResponse",
     "DepartmentUpdate",
     "DepartmentsListResponse",
+    "FrameworkResponse",
+    "FrameworksListResponse",
     "HealthzResponse",
     "LoginDepartment",
     "LoginResponse",
@@ -465,10 +562,10 @@ __all__ = [
     "RoleLiteralT",
     "RunResponse",
     "RunsListResponse",
-    "TopicResponse",
-    "TopicsListResponse",
-    "TopicSourceResponse",
-    "TopicDetailResponse",
     "TopicCleanupRequest",
     "TopicCleanupResponse",
+    "TopicDetailResponse",
+    "TopicResponse",
+    "TopicSourceResponse",
+    "TopicsListResponse",
 ]

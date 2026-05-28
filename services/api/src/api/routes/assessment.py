@@ -24,6 +24,7 @@ from api.dependencies import (
     get_active_department,
     require_role,
 )
+from api.schemas import AssessBatchRequest, AssessSingleRequest
 from assessor.adapters.anthropic_adapter import AnthropicAdapter
 from assessor.adapters.ollama_adapter import OllamaAdapter
 from assessor.adapters.openai_adapter import OpenAIAdapter
@@ -101,7 +102,7 @@ async def _build_pipeline(session_factory, department_id: str):
     return pipeline
 
 
-async def _run_job(job_id: str, department_id: str):
+async def _run_job(job_id: str, department_id: str, framework_id: str):
     """Background coroutine that processes an assessment job for one dept."""
     settings = get_settings()
     engine = get_engine(settings.database_url)
@@ -161,7 +162,9 @@ async def _run_job(job_id: str, department_id: str):
 
         for tid in topic_ids:
             try:
-                result = await pipeline.assess_topic(tid)
+                result = await pipeline.assess_topic(
+                    tid, framework_id=framework_id
+                )
                 if result:
                     results.append(result)
                 completed += 1
@@ -214,41 +217,118 @@ async def _run_job(job_id: str, department_id: str):
         await engine.dispose()
 
 
+async def _resolve_dept_framework(
+    session_factory, dept_id: str, requested_id: str | None
+) -> tuple[str, str]:
+    """Resolve which framework an assessment request should run against.
+
+    Returns ``(framework_id, framework_key)``.
+
+    - ``requested_id is None`` ⇒ pick the dept's default framework (the
+      single ``department_frameworks`` row with ``is_default = true``).
+      Errors with 422 if the dept has no default (data anomaly: migration
+      0019 + the auto-enable in ``POST /departments`` guarantee one).
+    - ``requested_id`` supplied ⇒ verify it is in the dept's enabled set;
+      else 422. Never silently fall back to default — operators sending
+      an explicit framework_id deserve an explicit error.
+    """
+    async with session_factory() as session:
+        if requested_id is None:
+            row = (
+                await session.execute(
+                    text(
+                        """
+                        SELECT af.id, af.key
+                        FROM department_frameworks df
+                        JOIN assessment_frameworks af ON af.id = df.framework_id
+                        WHERE df.department_id = :dept_id AND df.is_default = true
+                        LIMIT 1
+                        """
+                    ),
+                    {"dept_id": dept_id},
+                )
+            ).first()
+            if row is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "Department has no default framework configured. "
+                        "Set one via PUT /api/frameworks/mine."
+                    ),
+                )
+            return str(row[0]), str(row[1])
+
+        row = (
+            await session.execute(
+                text(
+                    """
+                    SELECT af.id, af.key
+                    FROM department_frameworks df
+                    JOIN assessment_frameworks af ON af.id = df.framework_id
+                    WHERE df.department_id = :dept_id AND af.id = :fw_id
+                    LIMIT 1
+                    """
+                ),
+                {"dept_id": dept_id, "fw_id": str(requested_id)},
+            )
+        ).first()
+        if row is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Requested framework is not enabled for this department"
+                ),
+            )
+        return str(row[0]), str(row[1])
+
+
 @router.post(
     "/assess",
     dependencies=[Depends(require_role("analyst", "dept_lead"))],
 )
 async def assess_batch(
-    limit: int = 20,
+    body: AssessBatchRequest | None = None,
     ad: ActiveDepartment = Depends(get_active_department),
 ):
     """Start a background assessment job for unassessed topics in the active dept."""
+    body = body or AssessBatchRequest()
     settings = get_settings()
     engine = get_engine(settings.database_url)
     session_factory = get_sessionmaker(engine)
     dept_id = str(ad.department.id)
     try:
+        framework_id, _framework_key = await _resolve_dept_framework(
+            session_factory,
+            dept_id,
+            str(body.framework_id) if body.framework_id else None,
+        )
+
         async with session_factory() as session:
             result = await session.execute(
                 text("""
-                    INSERT INTO assessment_jobs (department_id, total_topics, state)
-                    VALUES (:dept_id, :total, 'pending')
+                    INSERT INTO assessment_jobs (department_id, framework_id, total_topics, state)
+                    VALUES (:dept_id, :fw_id, :total, 'pending')
                     RETURNING id
                 """),
-                {"dept_id": dept_id, "total": limit},
+                {
+                    "dept_id": dept_id,
+                    "fw_id": framework_id,
+                    "total": body.limit,
+                },
             )
             job_id = result.scalar_one()
             await session.commit()
 
-        # Fire and forget the background task — carries dept_id explicitly
-        # since the worker has no request context.
-        asyncio.create_task(_run_job(str(job_id), dept_id))
+        # Fire and forget the background task — carries dept_id + framework_id
+        # explicitly since the worker has no request context.
+        asyncio.create_task(_run_job(str(job_id), dept_id, framework_id))
 
         return {
             "job_id": job_id,
             "state": "pending",
-            "total_topics": limit,
+            "total_topics": body.limit,
             "department_id": dept_id,
+            "framework_id": framework_id,
         }
     finally:
         await engine.dispose()
@@ -341,15 +421,23 @@ async def get_job(
 )
 async def assess_single(
     topic_id: str,
+    body: AssessSingleRequest | None = None,
     ad: ActiveDepartment = Depends(get_active_department),
 ):
     """Assess a single topic synchronously for the active dept."""
+    body = body or AssessSingleRequest()
     settings = get_settings()
     engine = get_engine(settings.database_url)
     session_factory = get_sessionmaker(engine)
+    dept_id = str(ad.department.id)
     try:
-        pipeline = await _build_pipeline(session_factory, str(ad.department.id))
-        result = await pipeline.assess_topic(topic_id)
+        framework_id, _framework_key = await _resolve_dept_framework(
+            session_factory,
+            dept_id,
+            str(body.framework_id) if body.framework_id else None,
+        )
+        pipeline = await _build_pipeline(session_factory, dept_id)
+        result = await pipeline.assess_topic(topic_id, framework_id=framework_id)
         if result is None:
             raise HTTPException(status_code=404, detail="Topic not found")
         return result
@@ -398,9 +486,11 @@ async def list_business_cases(
                 text(f"""
                     SELECT bc.id, bc.topic_id, t.title, bc.relevance_verdict,
                            bc.relevance_reason, bc.model_used, bc.prompt_version,
-                           bc.generated_at
+                           bc.generated_at, bc.structured_output,
+                           af.id, af.key, af.display_component
                     FROM business_cases bc
                     JOIN topics t ON t.id = bc.topic_id
+                    JOIN assessment_frameworks af ON af.id = bc.framework_id
                     WHERE bc.department_id = :dept_id
                     {extra_where}
                     ORDER BY bc.generated_at DESC
@@ -419,6 +509,12 @@ async def list_business_cases(
                     "model_used": r[5],
                     "prompt_version": r[6],
                     "generated_at": str(r[7]),
+                    "structured_output": r[8],
+                    "framework": {
+                        "id": str(r[9]),
+                        "key": r[10],
+                        "display_component": r[11],
+                    },
                 }
                 for r in rows
             ]

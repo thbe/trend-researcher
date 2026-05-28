@@ -43,6 +43,7 @@ from api.routes import dashboard as dashboard_routes
 from api.routes import departments as departments_routes
 from api.routes import department_pats as department_pats_routes
 from api.routes import department_sources as department_sources_routes
+from api.routes import frameworks as frameworks_routes
 
 
 @asynccontextmanager
@@ -86,6 +87,7 @@ app.include_router(assessment_routes.router, prefix="/api")
 app.include_router(ai_config_routes.router, prefix="/api")
 app.include_router(dashboard_routes.router, prefix="/api")
 app.include_router(departments_routes.router, prefix="/api")
+app.include_router(frameworks_routes.router, prefix="/api")
 app.include_router(department_pats_routes.router, prefix="/api")
 app.include_router(department_sources_routes.router, prefix="/api")
 app.include_router(internal_routes.router, prefix="/api")
