@@ -53,6 +53,12 @@ const items = computed<NavItem[]>(() => [
     show: session.canEditDeptConfig,
   },
   {
+    title: STRINGS.NAV_USERS,
+    icon: 'mdi-account-group-outline',
+    to: '/users',
+    show: session.isSuperadmin,
+  },
+  {
     title: STRINGS.NAV_DEPARTMENTS,
     icon: 'mdi-domain',
     to: '/departments',

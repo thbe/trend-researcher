@@ -95,6 +95,12 @@ const routes: RouteRecordRaw[] = [
     meta: { superadminOnly: true },
   },
   {
+    path: '/users',
+    name: 'users',
+    component: () => import('@/views/Users.vue'),
+    meta: { superadminOnly: true },
+  },
+  {
     path: '/departments',
     name: 'departments',
     component: () => import('@/views/Departments.vue'),
