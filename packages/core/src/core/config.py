@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     database_url: str
 
     # Auth: seed user credentials (upserted on app startup)
-    auth_seed_username: str = "admin"
+    auth_seed_username: str = "admin@app.local"
     auth_seed_password: str = "0nly4%Testing"
 
     # Auth: session cookie signing key (random default for dev; override in prod)
