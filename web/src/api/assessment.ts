@@ -1,6 +1,18 @@
 // Typed wrappers for assessment API endpoints.
 import { request } from './client'
 
+/**
+ * Framework reference embedded in a BusinessCase response.
+ * Populated once the API surface exposes per-case framework info (Phase 10);
+ * may be absent on legacy responses.
+ */
+export interface BusinessCaseFramework {
+  id: string
+  key: string
+  name: string
+  display_component: string
+}
+
 export interface BusinessCase {
   id: string
   topic_id: string
@@ -10,6 +22,15 @@ export interface BusinessCase {
   model_used: string
   prompt_version: string
   generated_at: string
+  // Phase 10 (T04): framework-aware fields. Optional for backwards
+  // compatibility with pre-10-03 responses that may omit them.
+  framework?: BusinessCaseFramework
+  structured_output?: Record<string, unknown>
+  importance?: number | null
+  confidence?: number | null
+  category?: string | null
+  investment_band?: string | null
+  department_id?: string
 }
 
 export interface AssessJobResponse {
