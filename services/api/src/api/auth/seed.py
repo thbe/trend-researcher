@@ -6,7 +6,7 @@ import structlog
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.auth import hash_password
+from api.auth import hash_password, normalize_username
 from core.models import User, UserDepartment
 
 _log = structlog.get_logger(__name__)
@@ -24,6 +24,7 @@ async def ensure_seed_user(
     - If user exists but password hash doesn't match: update hash.
     - If user exists and hash matches: no-op (except ensuring superadmin + dept).
     """
+    username = normalize_username(username)
     result = await session.execute(select(User).where(User.username == username))
     user = result.scalar_one_or_none()
 

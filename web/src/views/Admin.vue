@@ -11,6 +11,7 @@ import {
   createUser,
   deleteUser,
   listUsers,
+  resetUserPassword,
   type UserCreateRequest,
   type UserResponse,
 } from '@/api/users'
@@ -44,11 +45,17 @@ const usersSuccess = ref<string | null>(null)
 
 const createUserDialog = ref(false)
 const creatingUser = ref(false)
-const userForm = ref({ username: '', password: '', is_superadmin: false })
+const userForm = ref({ username: '', password: '', password_confirm: '', is_superadmin: false })
 
 const deleteUserDialog = ref(false)
 const deletingUser = ref(false)
 const deleteUserTarget = ref<UserResponse | null>(null)
+
+// Password reset state
+const resetUserDialog = ref(false)
+const resettingUser = ref(false)
+const resetUserTarget = ref<UserResponse | null>(null)
+const resetUserForm = ref({ password: '', password_confirm: '' })
 
 const userHeaders = [
   { title: 'Username', key: 'username' },
@@ -71,15 +78,20 @@ async function loadUsers() {
 }
 
 function openCreateUser() {
-  userForm.value = { username: '', password: '', is_superadmin: false }
+  userForm.value = { username: '', password: '', password_confirm: '', is_superadmin: false }
   createUserDialog.value = true
 }
 
 async function doCreateUser() {
+  if (userForm.value.password !== userForm.value.password_confirm) {
+    usersError.value = 'Passwords do not match'
+    return
+  }
   creatingUser.value = true
   usersError.value = null
   try {
-    await createUser(userForm.value as UserCreateRequest)
+    const { password_confirm: _pc, ...payload } = userForm.value
+    await createUser(payload as UserCreateRequest)
     usersSuccess.value = `User "${userForm.value.username}" created`
     createUserDialog.value = false
     await loadUsers()
@@ -108,6 +120,31 @@ async function doDeleteUser() {
     usersError.value = e.message || 'Failed to deactivate user'
   } finally {
     deletingUser.value = false
+  }
+}
+
+function openResetUser(user: UserResponse) {
+  resetUserTarget.value = user
+  resetUserForm.value = { password: '', password_confirm: '' }
+  resetUserDialog.value = true
+}
+
+async function doResetUser() {
+  if (!resetUserTarget.value) return
+  if (resetUserForm.value.password !== resetUserForm.value.password_confirm) {
+    usersError.value = 'Passwords do not match'
+    return
+  }
+  resettingUser.value = true
+  usersError.value = null
+  try {
+    await resetUserPassword(resetUserTarget.value.id, resetUserForm.value.password)
+    usersSuccess.value = `Password reset for "${resetUserTarget.value.username}"`
+    resetUserDialog.value = false
+  } catch (e: any) {
+    usersError.value = e.message || 'Failed to reset password'
+  } finally {
+    resettingUser.value = false
   }
 }
 
@@ -382,6 +419,13 @@ onMounted(async () => {
           </template>
           <template #item.actions="{ item }">
             <v-btn
+              icon="mdi-key-variant"
+              size="small"
+              variant="text"
+              title="Reset password"
+              @click.stop="openResetUser(item)"
+            />
+            <v-btn
               icon="mdi-account-off"
               size="small"
               variant="text"
@@ -549,14 +593,65 @@ onMounted(async () => {
       <v-card>
         <v-card-title>New User</v-card-title>
         <v-card-text>
-          <v-text-field v-model="userForm.username" label="Username" class="mb-2" />
+          <v-text-field v-model="userForm.username" label="Username" hint="Case-insensitive" persistent-hint class="mb-2" />
           <v-text-field v-model="userForm.password" label="Password" type="password" hint="Min 6 characters" persistent-hint class="mb-2" />
+          <v-text-field
+            v-model="userForm.password_confirm"
+            label="Confirm password"
+            type="password"
+            :error="userForm.password_confirm.length > 0 && userForm.password_confirm !== userForm.password"
+            :error-messages="userForm.password_confirm.length > 0 && userForm.password_confirm !== userForm.password ? ['Passwords do not match'] : []"
+            class="mb-2"
+          />
           <v-checkbox v-model="userForm.is_superadmin" label="Superadmin" hint="Full platform access" persistent-hint />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn @click="createUserDialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="creatingUser" :disabled="!userForm.username.trim() || userForm.password.length < 6" @click="doCreateUser">Create</v-btn>
+          <v-btn
+            color="primary"
+            :loading="creatingUser"
+            :disabled="!userForm.username.trim() || userForm.password.length < 6 || userForm.password !== userForm.password_confirm"
+            @click="doCreateUser"
+          >Create</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Reset user password -->
+    <v-dialog v-model="resetUserDialog" max-width="500">
+      <v-card>
+        <v-card-title>Reset Password</v-card-title>
+        <v-card-text>
+          <p class="mb-3">
+            Set a new password for <strong>{{ resetUserTarget?.username }}</strong>.
+            They will need to use the new password on next sign-in.
+          </p>
+          <v-text-field
+            v-model="resetUserForm.password"
+            label="New password"
+            type="password"
+            hint="Min 6 characters"
+            persistent-hint
+            class="mb-2"
+          />
+          <v-text-field
+            v-model="resetUserForm.password_confirm"
+            label="Confirm new password"
+            type="password"
+            :error="resetUserForm.password_confirm.length > 0 && resetUserForm.password_confirm !== resetUserForm.password"
+            :error-messages="resetUserForm.password_confirm.length > 0 && resetUserForm.password_confirm !== resetUserForm.password ? ['Passwords do not match'] : []"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="resetUserDialog = false">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            :loading="resettingUser"
+            :disabled="resetUserForm.password.length < 6 || resetUserForm.password !== resetUserForm.password_confirm"
+            @click="doResetUser"
+          >Reset password</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

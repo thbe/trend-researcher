@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.auth import hash_password
+from api.auth import hash_password, normalize_username
 from api.dependencies import get_current_user, get_session
 from core.models import User
 
@@ -32,6 +32,10 @@ class UserCreateRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=255)
     password: str = Field(..., min_length=6)
     is_superadmin: bool = False
+
+
+class UserPasswordResetRequest(BaseModel):
+    password: str = Field(..., min_length=6)
 
 
 class UserResponse(BaseModel):
@@ -98,8 +102,15 @@ async def create_user(
     """Create a new user (superadmin only)."""
     _require_superadmin(current_user)
 
+    username = normalize_username(body.username)
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Username cannot be empty",
+        )
+
     user = User(
-        username=body.username,
+        username=username,
         password_hash=hash_password(body.password),
         is_active=True,
         is_superadmin=body.is_superadmin,
@@ -145,4 +156,30 @@ async def deactivate_user(
         )
 
     user.is_active = False
+    await session.commit()
+
+
+@router.put("/users/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_user_password(
+    user_id: UUID,
+    body: UserPasswordResetRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Reset a user's password (superadmin only).
+
+    The target may be any active user, including the caller themselves.
+    Existing sessions remain valid — bcrypt-hashed cookies are not bound to
+    the password hash. Callers should sign out manually if they want to
+    invalidate other devices.
+    """
+    _require_superadmin(current_user)
+
+    user = await session.get(User, str(user_id))
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+
+    user.password_hash = hash_password(body.password)
     await session.commit()

@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import JSONResponse
 
-from api.auth import verify_password
+from api.auth import normalize_username, verify_password
 from api.auth.middleware import COOKIE_NAME, create_session_cookie
 from api.dependencies import get_session
 from api.schemas import LoginDepartment, LoginResponse
@@ -29,8 +29,9 @@ async def login(
     session: AsyncSession = Depends(get_session),
 ) -> JSONResponse:
     """Authenticate user and set signed session cookie."""
+    username = normalize_username(body.username)
     result = await session.execute(
-        select(User).where(User.username == body.username, User.is_active.is_(True))
+        select(User).where(User.username == username, User.is_active.is_(True))
     )
     user = result.scalar_one_or_none()
 

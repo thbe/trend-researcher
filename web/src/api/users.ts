@@ -31,3 +31,10 @@ export async function createUser(body: UserCreateRequest): Promise<UserResponse>
 export async function deleteUser(userId: string): Promise<void> {
   await request<void>(`/api/users/${userId}`, { method: 'DELETE' })
 }
+
+export async function resetUserPassword(userId: string, password: string): Promise<void> {
+  await request<void>(`/api/users/${userId}/password`, {
+    method: 'PUT',
+    body: { password },
+  })
+}
