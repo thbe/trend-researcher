@@ -92,15 +92,43 @@ onMounted(load)
 
                 <v-list-item-title class="text-body-1 font-weight-medium">
                   {{ src.source_name }}
+                  <v-chip
+                    v-if="src.owned"
+                    size="x-small"
+                    color="primary"
+                    variant="tonal"
+                    class="ml-2"
+                  >
+                    Owned
+                  </v-chip>
                 </v-list-item-title>
                 <v-list-item-subtitle>
+                  Owner: <strong>{{ src.owner_department_name }}</strong> ·
                   top_n: {{ src.top_n }} ·
                   <span v-if="src.feed_url">{{ src.feed_url }}</span>
                   <span v-else class="text-disabled">no feed url</span>
                 </v-list-item-subtitle>
 
                 <template #append>
+                  <v-tooltip
+                    v-if="src.owned"
+                    text="Your department owns this source — it is always active and cannot be unsubscribed here."
+                    location="start"
+                  >
+                    <template #activator="{ props }">
+                      <div v-bind="props">
+                        <v-switch
+                          :model-value="true"
+                          disabled
+                          color="primary"
+                          hide-details
+                          inset
+                        />
+                      </div>
+                    </template>
+                  </v-tooltip>
                   <v-switch
+                    v-else
                     :model-value="src.enabled"
                     :loading="saving[src.source_name]"
                     :disabled="saving[src.source_name]"

@@ -390,16 +390,24 @@ class CrawlConfig(Base):
     """Per-source technical crawl configuration (Phase 5).
 
     Holds tuning knobs (``top_n``, ``capture_summary``, ``verify_ssl``,
-    ``feed_url``) that are global per source — *not* per department. Whether
-    a source is actually crawled is determined by the union of
-    :class:`DepartmentSource` rows across all departments (see migration
-    0017 / MT-006). The crawler reads this table at the start of each run
-    for tech config; subscription comes from ``department_sources``.
+    ``feed_url``) that are global per source — *not* per department. The
+    crawler fetches each source once globally (``source_name`` is the
+    primary key); ``department_id`` records which department *owns* the
+    source (added in migration 0022). Owner dept members get full CRUD on
+    their sources; other depts may opt in via :class:`DepartmentSource`.
     """
 
     __tablename__ = "crawl_config"
+    __table_args__ = (
+        Index("ix_crawl_config_department_id", "department_id"),
+    )
 
     source_name: Mapped[str] = mapped_column(Text, primary_key=True)
+    department_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("departments.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
     top_n: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("100")
     )

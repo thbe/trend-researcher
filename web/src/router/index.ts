@@ -26,6 +26,7 @@ declare module 'vue-router' {
     requireCanAssess?: boolean
     /** Routes that require `canEditDeptConfig` (dept_lead+ in active dept). */
     requireCanEditDeptConfig?: boolean
+    requireCanManageSources?: boolean
   }
 }
 
@@ -76,7 +77,7 @@ const routes: RouteRecordRaw[] = [
     path: '/source-subscriptions',
     name: 'source-subscriptions',
     component: () => import('@/views/SourceSubscriptions.vue'),
-    meta: { requireCanEditDeptConfig: true },
+    meta: { requireCanManageSources: true },
   },
   {
     path: '/framework-settings',
@@ -92,7 +93,7 @@ const routes: RouteRecordRaw[] = [
     name: 'sources',
     component: () => import('@/views/CrawlConfig.vue'),
     alias: ['/crawl-config'],
-    meta: { superadminOnly: true },
+    meta: { requireCanManageSources: true },
   },
   {
     path: '/admin',
@@ -148,6 +149,13 @@ router.beforeEach(async (to) => {
   if (to.meta.requireCanEditDeptConfig && !session.canEditDeptConfig) {
     useUiStore().error(
       `Access denied: "${String(to.name ?? to.path)}" requires dept lead role in the active department.`,
+    )
+    return { name: 'dashboard' }
+  }
+
+  if (to.meta.requireCanManageSources && !session.canManageSources) {
+    useUiStore().error(
+      `Access denied: "${String(to.name ?? to.path)}" requires analyst or dept lead role in the active department.`,
     )
     return { name: 'dashboard' }
   }

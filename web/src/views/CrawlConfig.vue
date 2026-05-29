@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   listCrawlConfig,
   updateCrawlConfig,
@@ -8,9 +8,24 @@ import {
   type CrawlConfig,
   type CrawlConfigCreate,
 } from '@/api/crawlConfig'
+import { listDepartments, type Department } from '@/api/departments'
 import { cleanupOrphanTopics, cleanupTopics, type TopicCleanupResponse } from '@/api/topics'
+import { useSessionStore } from '@/stores/session'
+
+const session = useSessionStore()
+const isSuperadmin = computed(() => session.isSuperadmin)
+const activeDeptName = computed(() => session.activeDepartment?.name ?? '')
+const pageTitle = computed(() =>
+  isSuperadmin.value ? 'Sources — Global' : `Sources — ${activeDeptName.value || 'My Department'}`,
+)
+const pageSubtitle = computed(() =>
+  isSuperadmin.value
+    ? 'All connector definitions across every department. You can reassign ownership when editing.'
+    : 'Connector definitions owned by your department. Other departments can opt-in via Source Subscriptions.',
+)
 
 const configs = ref<CrawlConfig[]>([])
+const departments = ref<Department[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 const saving = ref<string | null>(null)
@@ -24,6 +39,7 @@ const newSource = ref<CrawlConfigCreate>({
   capture_summary: true,
   verify_ssl: true,
   feed_url: null,
+  department_id: undefined,
 })
 const addLoading = ref(false)
 
@@ -35,7 +51,14 @@ const deleteLoading = ref(false)
 // Edit dialog state
 const editDialog = ref(false)
 const editSource = ref<CrawlConfig | null>(null)
-const editForm = ref({ top_n: 100, feed_url: '' as string | null, capture_summary: true, verify_ssl: true, enabled: true })
+const editForm = ref({
+  top_n: 100,
+  feed_url: '' as string | null,
+  capture_summary: true,
+  verify_ssl: true,
+  enabled: true,
+  department_id: '' as string,
+})
 const editLoading = ref(false)
 
 // Cleanup dialog state
@@ -54,6 +77,29 @@ const orphanDialog = ref(false)
 const orphanLoading = ref(false)
 const orphanResult = ref<TopicCleanupResponse | null>(null)
 const orphanError = ref<string | null>(null)
+
+const departmentOptions = computed(() =>
+  departments.value.map((d) => ({ title: d.name, value: d.id })),
+)
+
+const tableHeaders = computed(() => {
+  const base: any[] = [
+    { title: 'Source', key: 'source_name' },
+  ]
+  if (isSuperadmin.value) {
+    base.push({ title: 'Department', key: 'department_name' })
+  }
+  base.push(
+    { title: 'Enabled', key: 'enabled', align: 'center' },
+    { title: 'Top N', key: 'top_n', align: 'center' },
+    { title: 'Verify SSL', key: 'verify_ssl', align: 'center' },
+    { title: 'Capture Summary', key: 'capture_summary', align: 'center' },
+    { title: 'Feed URL', key: 'feed_url' },
+    { title: 'Updated', key: 'updated_at' },
+    { title: '', key: 'actions', sortable: false, align: 'center' },
+  )
+  return base
+})
 
 function openOrphanDialog() {
   orphanResult.value = null
@@ -78,7 +124,14 @@ async function load() {
   loading.value = true
   error.value = null
   try {
-    configs.value = await listCrawlConfig()
+    const tasks: Promise<unknown>[] = [
+      listCrawlConfig().then((r) => (configs.value = r)),
+    ]
+    // Superadmin needs the dept dropdown options to create/reassign rows.
+    if (isSuperadmin.value) {
+      tasks.push(listDepartments().then((r) => (departments.value = r.departments)))
+    }
+    await Promise.all(tasks)
   } catch (e: any) {
     error.value = e.message || 'Failed to load config'
   } finally {
@@ -134,15 +187,27 @@ function openAddDialog() {
     capture_summary: true,
     verify_ssl: true,
     feed_url: null,
+    // Superadmin must pick a dept explicitly; dept-scoped users have it
+    // forced server-side from X-Active-Department so we leave it blank.
+    department_id: undefined,
   }
   addDialog.value = true
 }
+
+const addDisabled = computed(() => {
+  if (!newSource.value.source_name) return true
+  if (isSuperadmin.value && !newSource.value.department_id) return true
+  return false
+})
 
 async function addSource() {
   addLoading.value = true
   error.value = null
   try {
-    const created = await createCrawlConfig(newSource.value)
+    const payload: CrawlConfigCreate = { ...newSource.value }
+    // Strip undefined dept id so we don't send `"department_id": null`.
+    if (!payload.department_id) delete payload.department_id
+    const created = await createCrawlConfig(payload)
     configs.value.push(created)
     configs.value.sort((a, b) => a.source_name.localeCompare(b.source_name))
     addDialog.value = false
@@ -182,6 +247,7 @@ function openEditDialog(cfg: CrawlConfig) {
     capture_summary: cfg.capture_summary,
     verify_ssl: cfg.verify_ssl,
     enabled: cfg.enabled,
+    department_id: cfg.department_id,
   }
   editDialog.value = true
 }
@@ -191,13 +257,23 @@ async function saveEdit() {
   editLoading.value = true
   error.value = null
   try {
-    const updated = await updateCrawlConfig(editSource.value.source_name, {
+    const payload: any = {
       top_n: editForm.value.top_n,
       feed_url: editForm.value.feed_url,
       capture_summary: editForm.value.capture_summary,
       verify_ssl: editForm.value.verify_ssl,
       enabled: editForm.value.enabled,
-    })
+    }
+    // Only superadmin is allowed to reassign ownership. Only include the
+    // field if it actually changed to avoid 403 noise for non-changes.
+    if (
+      isSuperadmin.value &&
+      editForm.value.department_id &&
+      editForm.value.department_id !== editSource.value.department_id
+    ) {
+      payload.department_id = editForm.value.department_id
+    }
+    const updated = await updateCrawlConfig(editSource.value.source_name, payload)
     const idx = configs.value.findIndex((c) => c.source_name === editSource.value!.source_name)
     if (idx >= 0) configs.value[idx] = updated
     editDialog.value = false
@@ -246,9 +322,9 @@ async function doCleanup() {
       <v-col>
         <div class="d-flex align-center mb-4">
           <div>
-            <h1 class="text-h4">Sources — Tech Config (Global)</h1>
+            <h1 class="text-h4">{{ pageTitle }}</h1>
             <div class="text-caption text-medium-emphasis">
-              Connector configuration shared across all departments. Per-department subscriptions live in Source Subscriptions.
+              {{ pageSubtitle }}
             </div>
           </div>
           <v-spacer />
@@ -284,19 +360,16 @@ async function doCleanup() {
             :items="configs"
             :loading="loading"
             item-value="source_name"
-            :headers="[
-              { title: 'Source', key: 'source_name' },
-              { title: 'Enabled', key: 'enabled', align: 'center' },
-              { title: 'Top N', key: 'top_n', align: 'center' },
-              { title: 'Verify SSL', key: 'verify_ssl', align: 'center' },
-              { title: 'Capture Summary', key: 'capture_summary', align: 'center' },
-              { title: 'Feed URL', key: 'feed_url' },
-              { title: 'Updated', key: 'updated_at' },
-              { title: '', key: 'actions', sortable: false, align: 'center' },
-            ]"
+            :headers="tableHeaders"
             :items-per-page="-1"
             hide-default-footer
           >
+            <template #item.department_name="{ item }">
+              <v-chip size="small" color="primary" variant="tonal">
+                {{ item.department_name }}
+              </v-chip>
+            </template>
+
             <template #item.enabled="{ item }">
               <v-switch
                 :model-value="item.enabled"
@@ -391,6 +464,15 @@ async function doCleanup() {
             persistent-hint
             class="mb-3"
           />
+          <v-select
+            v-if="isSuperadmin"
+            v-model="newSource.department_id"
+            :items="departmentOptions"
+            label="Owner Department"
+            hint="Department this source belongs to (required)"
+            persistent-hint
+            class="mb-3"
+          />
           <v-text-field
             v-model="newSource.feed_url"
             label="Feed URL"
@@ -433,7 +515,7 @@ async function doCleanup() {
           <v-btn
             color="primary"
             :loading="addLoading"
-            :disabled="!newSource.source_name"
+            :disabled="addDisabled"
             @click="addSource"
           >
             Add
@@ -463,6 +545,15 @@ async function doCleanup() {
       <v-card>
         <v-card-title>Edit Source: {{ editSource?.source_name }}</v-card-title>
         <v-card-text>
+          <v-select
+            v-if="isSuperadmin"
+            v-model="editForm.department_id"
+            :items="departmentOptions"
+            label="Owner Department"
+            hint="Reassign this source to another department (superadmin only)"
+            persistent-hint
+            class="mb-3"
+          />
           <v-text-field
             v-model="editForm.feed_url"
             label="Feed URL"

@@ -44,7 +44,7 @@ const items = computed<NavItem[]>(() => [
     title: STRINGS.NAV_SOURCE_SUBSCRIPTIONS,
     icon: 'mdi-rss',
     to: '/source-subscriptions',
-    show: session.canEditDeptConfig,
+    show: session.canManageSources,
   },
   {
     title: STRINGS.NAV_FRAMEWORK_SETTINGS,
@@ -62,7 +62,7 @@ const items = computed<NavItem[]>(() => [
     title: STRINGS.NAV_CRAWL_CONFIG,
     icon: 'mdi-cog-outline',
     to: '/sources',
-    show: session.isSuperadmin,
+    show: session.canManageSources,
   },
 ])
 

@@ -1,4 +1,14 @@
-import { ApiError } from './client'
+// Source tech-config CRUD.
+//
+// Multi-tenant ownership (plan: source ownership phase):
+//   * Each row has an owner `department_id`. The API filters GET by the
+//     active department for non-superadmin callers. Superadmin sees all
+//     rows but must always pass a department_id on create and is the
+//     only role allowed to reassign ownership via PUT.
+//   * X-Active-Department is injected by the shared `request()` helper
+//     in ./client.ts, so callers never specify it manually.
+
+import { request } from './client'
 
 export interface CrawlConfig {
   source_name: string
@@ -7,6 +17,8 @@ export interface CrawlConfig {
   capture_summary: boolean
   verify_ssl: boolean
   feed_url: string | null
+  department_id: string
+  department_name: string
   updated_at: string
 }
 
@@ -17,43 +29,40 @@ export interface CrawlConfigCreate {
   capture_summary?: boolean
   verify_ssl?: boolean
   feed_url?: string | null
+  /** Required for superadmin; ignored / forced to active dept for others. */
+  department_id?: string
 }
 
-export async function listCrawlConfig(): Promise<CrawlConfig[]> {
-  const res = await fetch('/api/crawl-config', {
-    headers: { Accept: 'application/json' },
-  })
-  if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`)
-  return (await res.json()) as CrawlConfig[]
+export interface CrawlConfigUpdate {
+  enabled?: boolean
+  top_n?: number
+  capture_summary?: boolean
+  verify_ssl?: boolean
+  feed_url?: string | null
+  /** Superadmin-only: reassign ownership to another department. */
+  department_id?: string
 }
 
-export async function createCrawlConfig(data: CrawlConfigCreate): Promise<CrawlConfig> {
-  const res = await fetch('/api/crawl-config', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(data),
-  })
-  if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`)
-  return (await res.json()) as CrawlConfig
+export function listCrawlConfig(): Promise<CrawlConfig[]> {
+  return request<CrawlConfig[]>('/api/crawl-config')
 }
 
-export async function updateCrawlConfig(
+export function createCrawlConfig(data: CrawlConfigCreate): Promise<CrawlConfig> {
+  return request<CrawlConfig>('/api/crawl-config', { method: 'POST', body: data })
+}
+
+export function updateCrawlConfig(
   sourceName: string,
-  data: { enabled?: boolean; top_n?: number; capture_summary?: boolean; verify_ssl?: boolean; feed_url?: string | null },
+  data: CrawlConfigUpdate,
 ): Promise<CrawlConfig> {
-  const res = await fetch(`/api/crawl-config/${sourceName}`, {
+  return request<CrawlConfig>(`/api/crawl-config/${encodeURIComponent(sourceName)}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(data),
+    body: data,
   })
-  if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`)
-  return (await res.json()) as CrawlConfig
 }
 
-export async function deleteCrawlConfig(sourceName: string): Promise<void> {
-  const res = await fetch(`/api/crawl-config/${sourceName}`, {
+export function deleteCrawlConfig(sourceName: string): Promise<void> {
+  return request<void>(`/api/crawl-config/${encodeURIComponent(sourceName)}`, {
     method: 'DELETE',
-    headers: { Accept: 'application/json' },
   })
-  if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`)
 }

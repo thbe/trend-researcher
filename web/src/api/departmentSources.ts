@@ -13,6 +13,11 @@ export interface DepartmentSource {
   capture_summary: boolean
   verify_ssl: boolean
   feed_url: string | null
+  /** True when the source belongs to the active department. Owned
+   *  sources are always implicitly enabled and cannot be toggled. */
+  owned: boolean
+  owner_department_id: string
+  owner_department_name: string
 }
 
 export interface DepartmentSourcesListResponse {

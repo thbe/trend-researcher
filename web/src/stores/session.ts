@@ -115,6 +115,15 @@ export const useSessionStore = defineStore('session', {
       const r = this.activeRole
       return r !== null && roleAtLeast(r, 'dept_lead')
     },
+    canManageSources(): boolean {
+      // Source subscriptions are dept-local data (which feeds we listen to).
+      // Same trust level as running crawls or curating topics → analyst+.
+      // Wider than canEditDeptConfig, which covers AI config / framework
+      // settings (those still require dept_lead).
+      if (this.isSuperadmin) return true
+      const r = this.activeRole
+      return r !== null && roleAtLeast(r, 'analyst')
+    },
     canHarmonize(): boolean {
       return this.canEditDeptConfig
     },

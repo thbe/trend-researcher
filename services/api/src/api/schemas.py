@@ -175,11 +175,16 @@ class CrawlConfigResponse(BaseModel):
     Phase 10 (MT-006): the ``enabled`` flag moved to ``department_sources``;
     crawl_config carries only tech tuning knobs that apply uniformly to a
     source regardless of which dept subscribes to it.
+
+    ``department_id``/``department_name`` (added 2026-05) identify the
+    *owning* department — the dept whose members may CRUD this row.
     """
 
     model_config = ConfigDict(from_attributes=True)
 
     source_name: str
+    department_id: UUID
+    department_name: str
     top_n: int
     capture_summary: bool
     verify_ssl: bool
@@ -188,18 +193,29 @@ class CrawlConfigResponse(BaseModel):
 
 
 class CrawlConfigUpdateRequest(BaseModel):
-    """Mutable tech fields the (super)admin can change via the UI."""
+    """Mutable tech fields the source owner (or superadmin) can change.
+
+    ``department_id`` is settable only by superadmins (reassign ownership);
+    dept-scoped users sending it get a 403 from the route layer.
+    """
 
     top_n: int | None = Field(None, ge=1, le=500)
     capture_summary: bool | None = None
     verify_ssl: bool | None = None
     feed_url: str | None = None
+    department_id: UUID | None = None
 
 
 class CrawlConfigCreateRequest(BaseModel):
-    """Create a new crawl source (tech config only)."""
+    """Create a new crawl source (tech config only).
+
+    ``department_id`` is the owner department. Superadmins must supply
+    one; dept-scoped users have it forced to their active department by
+    the route layer (any value they send is ignored).
+    """
 
     source_name: str = Field(..., min_length=1, max_length=100)
+    department_id: UUID | None = None
     top_n: int = Field(100, ge=1, le=500)
     capture_summary: bool = True
     verify_ssl: bool = True
@@ -369,15 +385,24 @@ class LoginResponse(BaseModel):
 class DepartmentSourceResponse(BaseModel):
     """One known crawl source joined with the active dept's subscription flag.
 
-    ``enabled`` reflects this department's subscription (``false`` if there
-    is no row in ``department_sources`` for the active dept). The other
-    fields mirror ``crawl_config`` so the UI can render a single list.
+    ``enabled`` reflects this department's effective subscription. For
+    sources owned by the active dept (``owned=true``) it is always ``true``
+    — owners are implicitly subscribed and cannot toggle themselves off.
+    For other sources, ``enabled`` comes from the dept's row in
+    ``department_sources`` (``false`` if no row).
+
+    ``owner_department_id``/``owner_department_name`` identify who owns
+    the source so the UI can show "subscribed to BBC News (owned by
+    Editorial)" without an extra round-trip.
     """
 
     model_config = ConfigDict(from_attributes=True)
 
     source_name: str
     enabled: bool
+    owned: bool
+    owner_department_id: UUID
+    owner_department_name: str
     top_n: int
     capture_summary: bool
     verify_ssl: bool

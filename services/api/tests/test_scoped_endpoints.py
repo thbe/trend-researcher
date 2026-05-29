@@ -103,8 +103,18 @@ async def scoped_db(seeded_db: SeededDb):
     async with sessionmaker() as session:
         session.add_all(
             [
-                CrawlConfig(source_name="hackernews", top_n=30),
-                CrawlConfig(source_name="nyt_homepage", top_n=20),
+                # default dept owns hackernews; other dept owns nyt_homepage
+                # so the cross-ownership / opt-in cases are exercised.
+                CrawlConfig(
+                    source_name="hackernews",
+                    top_n=30,
+                    department_id=seeded_db.default_dept_id,
+                ),
+                CrawlConfig(
+                    source_name="nyt_homepage",
+                    top_n=20,
+                    department_id=seeded_db.other_dept_id,
+                ),
             ]
         )
         await session.commit()
@@ -398,7 +408,7 @@ async def test_department_sources_crud(
     )
     assert missing.status_code == 404
 
-    # Viewer in Other cannot PUT in Other dept (viewer role, not dept_lead).
+    # Viewer in Other cannot PUT in Other dept (viewer role, not analyst/dept_lead).
     viewer_other = await make_authed_client(
         scoped_db.viewer_b, active_dept=scoped_db.other_dept_id
     )
@@ -406,3 +416,15 @@ async def test_department_sources_crud(
         "/api/department-sources/hackernews", json={"enabled": True}
     )
     assert forbidden.status_code == 403
+
+    # Analyst in Default CAN toggle (widened from dept_lead-only — analysts
+    # need to manage their own dept's source set, same trust level as
+    # running crawls and curating topics).
+    analyst_default = await make_authed_client(
+        scoped_db.analyst_a, active_dept=scoped_db.default_dept_id
+    )
+    analyst_put = await analyst_default.put(
+        "/api/department-sources/nyt_homepage", json={"enabled": True}
+    )
+    assert analyst_put.status_code == 200
+    assert analyst_put.json()["enabled"] is True
