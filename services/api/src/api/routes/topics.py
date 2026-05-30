@@ -33,7 +33,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from sqlalchemy import Column, MetaData, Table, and_, delete, exists, select, func, literal_column
+from sqlalchemy import Column, MetaData, Table, and_, delete, exists, or_, select, func, literal_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import (
@@ -50,7 +50,7 @@ from api.schemas import (
     TopicSourceResponse,
     TopicsListResponse,
 )
-from core.models import BusinessCase, DepartmentSource, Topic, TopicSource
+from core.models import BusinessCase, CrawlConfig, DepartmentSource, Topic, TopicSource
 
 router = APIRouter()
 
@@ -127,18 +127,37 @@ async def list_topics(
     dept_id = ad.department.id
 
     # Dept-scope predicate: this topic has at least one TopicSource whose
-    # source is enabled for the active dept.
+    # source is either (a) explicitly enabled for the active dept via
+    # department_sources, OR (b) OWNED by the active dept (crawl_config.
+    # department_id). The ownership branch honors the contract documented
+    # in department_sources.py: owners are implicitly subscribed and their
+    # owned sources are never togglable off. Without it, a dept that creates
+    # a source via Crawl Config sees 0 topics from that source until they
+    # also manually visit Source Subscriptions (which won't even show the
+    # owned row as toggleable). This makes ownership self-sufficient.
     dept_source_exists = exists(
         select(1)
         .select_from(TopicSource)
-        .join(
+        .outerjoin(
             DepartmentSource,
-            DepartmentSource.source_name == TopicSource.source_name,
+            and_(
+                DepartmentSource.source_name == TopicSource.source_name,
+                DepartmentSource.department_id == dept_id,
+            ),
+        )
+        .outerjoin(
+            CrawlConfig,
+            CrawlConfig.source_name == TopicSource.source_name,
         )
         .where(
             TopicSource.topic_id == Topic.id,
-            DepartmentSource.department_id == dept_id,
-            DepartmentSource.enabled.is_(True),
+            or_(
+                and_(
+                    DepartmentSource.department_id == dept_id,
+                    DepartmentSource.enabled.is_(True),
+                ),
+                CrawlConfig.department_id == dept_id,
+            ),
         )
         .correlate(Topic)
     )

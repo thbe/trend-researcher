@@ -252,6 +252,43 @@ onMounted(() => {
       :text="error"
     />
 
+    <!-- Friendlier empty state: when 0 topics, send the user to Source
+         Subscriptions (the most common cause of an empty list is "no sources
+         enabled for this department yet"). The data-table itself still
+         renders with its own no-data slot below for the inline indicator. -->
+    <v-card
+      v-if="!loading && totalItems === 0 && !error"
+      variant="outlined"
+      class="mb-4 text-center pa-8"
+    >
+      <v-icon icon="mdi-rss-off" size="48" color="medium-emphasis" class="mb-3" />
+      <div class="text-h6 font-weight-medium mb-2">No topics for this department yet</div>
+      <div class="text-body-2 text-medium-emphasis mb-4">
+        Topics show up here once your department is subscribed to (or owns) at least one source
+        and the crawler has run.
+      </div>
+      <div class="d-flex justify-center ga-2 flex-wrap">
+        <v-btn
+          color="primary"
+          variant="flat"
+          prepend-icon="mdi-rss"
+          :to="{ name: 'source-subscriptions' }"
+        >
+          Manage Sources
+        </v-btn>
+        <v-btn
+          color="secondary"
+          variant="tonal"
+          prepend-icon="mdi-refresh"
+          :loading="crawling"
+          :disabled="crawling || assessing"
+          @click="triggerCrawl"
+        >
+          Run Crawl
+        </v-btn>
+      </div>
+    </v-card>
+
     <v-data-table-server
       v-if="!mobile"
       :headers="headers"
