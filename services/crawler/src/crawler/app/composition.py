@@ -161,7 +161,13 @@ async def build_sources_from_db(
     1. Read every ``crawl_config`` row (technical config).
     2. Read distinct ``source_name`` from ``department_sources`` where
        ``enabled = true`` (scoped to ``department_id`` if given).
-    3. Build sources for the intersection. Emit INFO log
+    3. **Union with ownership** (honors the per-source ownership
+       contract from ``department_sources.py``): a dept that owns a
+       crawl_config row is implicitly subscribed. For
+       ``department_id=None`` (global), every source has an owner so the
+       full catalog is always selected. For ``department_id=<uuid>``,
+       add that dept's owned sources to its subscriptions.
+    4. Build sources for the resulting set. Emit INFO log
        ``crawl_sources.selected_via_department_sources_union``.
 
     Defensive fallback (only when ``department_id is None``):
@@ -197,6 +203,32 @@ async def build_sources_from_db(
             sub_names = set(
                 (await session.execute(sub_stmt)).scalars().all()
             )
+            # Ownership contract (matches services/api/src/api/routes/
+            # department_sources.py + topics.py predicate): a department
+            # that OWNS a crawl_config row is implicitly subscribed to
+            # that source — no `department_sources` row is required, and
+            # the owner cannot toggle themselves off. The crawler must
+            # honor that here, otherwise newly-owned sources never get
+            # crawled until someone manually adds a redundant
+            # subscription row.
+            if department_id is not None:
+                owned_names = {
+                    cfg.source_name
+                    for cfg in cfg_rows
+                    if str(getattr(cfg, "department_id", None)) == str(department_id)
+                }
+                sub_names = sub_names | owned_names
+            else:
+                # Global crawl: every source has an owner (NOT NULL FK),
+                # so the union of owners equals the full catalog. Skip
+                # the union when ownership is missing (tests with bare
+                # row stubs) — the subscription set still drives it.
+                owned_any = {
+                    cfg.source_name
+                    for cfg in cfg_rows
+                    if getattr(cfg, "department_id", None) is not None
+                }
+                sub_names = sub_names | owned_any
     except Exception as exc:  # noqa: BLE001
         _log.warning(
             "crawl_config.read_failed_fallback_hardcoded",
