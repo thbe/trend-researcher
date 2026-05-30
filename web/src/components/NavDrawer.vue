@@ -41,9 +41,9 @@ const items = computed<NavItem[]>(() => [
     show: session.canEditDeptConfig,
   },
   {
-    title: STRINGS.NAV_SOURCE_SUBSCRIPTIONS,
+    title: STRINGS.NAV_SOURCES,
     icon: 'mdi-rss',
-    to: '/source-subscriptions',
+    to: '/sources',
     show: session.canManageSources,
   },
   {
@@ -57,12 +57,6 @@ const items = computed<NavItem[]>(() => [
     icon: 'mdi-shield-account-outline',
     to: '/admin',
     show: session.isSuperadmin,
-  },
-  {
-    title: STRINGS.NAV_CRAWL_CONFIG,
-    icon: 'mdi-cog-outline',
-    to: '/sources',
-    show: session.canManageSources,
   },
 ])
 

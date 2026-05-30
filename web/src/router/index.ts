@@ -74,9 +74,13 @@ const routes: RouteRecordRaw[] = [
     meta: { requireCanEditDeptConfig: true },
   },
   {
-    path: '/source-subscriptions',
-    name: 'source-subscriptions',
+    // Unified Sources page: catalog + subscriptions + connector tech config
+    // in one card-grid view (formerly /source-subscriptions and /sources).
+    // Legacy paths remain as aliases so deep links keep working.
+    path: '/sources',
+    name: 'sources',
     component: () => import('@/views/SourceSubscriptions.vue'),
+    alias: ['/source-subscriptions', '/crawl-config'],
     meta: { requireCanManageSources: true },
   },
   {
@@ -84,16 +88,6 @@ const routes: RouteRecordRaw[] = [
     name: 'framework-settings',
     component: () => import('@/views/FrameworkSettings.vue'),
     meta: { requireCanEditDeptConfig: true },
-  },
-  {
-    // Plan path is /crawl-config; legacy NavDrawer link & PostgreSQL admin
-    // bookmarks use /sources. Keep /sources as canonical, /crawl-config as
-    // alias for forward-compat with planning doc terminology.
-    path: '/sources',
-    name: 'sources',
-    component: () => import('@/views/CrawlConfig.vue'),
-    alias: ['/crawl-config'],
-    meta: { requireCanManageSources: true },
   },
   {
     path: '/admin',

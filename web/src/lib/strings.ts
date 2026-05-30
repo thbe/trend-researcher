@@ -15,8 +15,7 @@ export const STRINGS = {
   PAGE_TOPIC_DETAIL: 'Topic Detail',
   PAGE_ASSESSMENT: 'Assessment',
   PAGE_AI_CONFIG: 'AI Configuration',
-  PAGE_CRAWL_CONFIG: 'Sources — Tech Config (Global)',
-  PAGE_SOURCE_SUBSCRIPTIONS: 'Sources — Subscriptions',
+  PAGE_SOURCES: 'Sources',
   PAGE_FRAMEWORK_SETTINGS: 'Framework Settings',
   PAGE_USERS: 'Users',
   PAGE_DEPARTMENTS: 'Departments',
@@ -28,10 +27,9 @@ export const STRINGS = {
   NAV_TOPICS: 'Topics',
   NAV_ASSESSMENT: 'Assess',
   NAV_AI_CONFIG: 'AI Config',
-  NAV_SOURCE_SUBSCRIPTIONS: 'Sources — Subscriptions',
+  NAV_SOURCES: 'Sources',
   NAV_FRAMEWORK_SETTINGS: 'Framework Settings',
   NAV_ADMIN: 'Admin',
-  NAV_CRAWL_CONFIG: 'Sources — Connectors',
 
   // Buttons / key labels
   BTN_SIGN_IN: 'Sign In',

@@ -272,7 +272,7 @@ onMounted(() => {
           color="primary"
           variant="flat"
           prepend-icon="mdi-rss"
-          :to="{ name: 'source-subscriptions' }"
+          :to="{ name: 'sources' }"
         >
           Manage Sources
         </v-btn>
