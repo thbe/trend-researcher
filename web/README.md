@@ -21,15 +21,17 @@ No state is persisted client-side. No auth. Same-origin only.
 
 - Node 20 LTS (see `.nvmrc`). Newer Node majors work for Vite 5 + Vuetify
   3 — verified on Node 26 — but `.nvmrc` is the published baseline.
-- A running API on `http://localhost:8000` (start the compose stack:
+- A running API on `http://localhost:8088` (start the compose stack:
   `docker compose up -d postgres api`) for the dev workflow.
+  Host port `:8000` is reserved for oMLX on macOS — see project README
+  → "Port allocation".
 
 ## Dev workflow
 
 ```bash
 cd web
 npm install            # one-time
-npm run dev            # Vite on :5173, proxies /api -> :8000
+npm run dev            # Vite on :5173, proxies /api -> :8088
 ```
 
 `vite.config.ts` proxies any `/api/*` request the SPA makes to the
@@ -63,7 +65,7 @@ department, frameworks) and consumes **OpenAPI-typed** schemas generated
 from the FastAPI service.
 
 ```bash
-npm run gen:api        # fetch http://localhost:8000/openapi.json
+npm run gen:api        # fetch http://localhost:8088/openapi.json
                        # -> src/api/generated/api.ts (git-ignored)
 ```
 

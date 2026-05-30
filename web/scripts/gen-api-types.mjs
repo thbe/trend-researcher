@@ -2,7 +2,7 @@
 /**
  * OpenAPI -> TypeScript codegen for the SPA.
  *
- * Reads OPENAPI_URL (default http://localhost:8000/openapi.json) and writes
+ * Reads OPENAPI_URL (default http://localhost:8088/openapi.json) and writes
  * `web/src/api/generated/api.ts` using openapi-typescript.
  *
  * Flags:
@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const OUT_FILE = resolve(__dirname, "../src/api/generated/api.ts")
-const OPENAPI_URL = process.env.OPENAPI_URL ?? "http://localhost:8000/openapi.json"
+const OPENAPI_URL = process.env.OPENAPI_URL ?? "http://localhost:8088/openapi.json"
 const SOFT = process.argv.includes("--if-server-up")
 
 const STUB = `// AUTO-GENERATED STUB — written by scripts/gen-api-types.mjs when the API was
@@ -53,9 +53,12 @@ async function ensureStub() {
 
 async function main() {
   let openapiTypescript
+  let astToString
   try {
     const mod = await import("openapi-typescript")
     openapiTypescript = mod.default ?? mod
+    // openapi-typescript v7+ returns an AST; v6 returned a string.
+    astToString = mod.astToString
   } catch (err) {
     if (SOFT) {
       warn(`openapi-typescript not installed; falling back to stub. (${err.message})`)
@@ -78,8 +81,10 @@ async function main() {
     throw err
   }
 
+  // v7 returns an AST node array; v6 returns a string. Normalize to string.
+  const text = typeof output === "string" ? output : astToString(output)
   mkdirSync(dirname(OUT_FILE), { recursive: true })
-  writeFileSync(OUT_FILE, output, "utf8")
+  writeFileSync(OUT_FILE, text, "utf8")
   info(`wrote ${OUT_FILE}`)
 }
 

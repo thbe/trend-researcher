@@ -3,9 +3,17 @@
 # - postgres:  long-running data store with healthcheck + named volume.
 # - crawler:   one-shot ingest job (no restart policy by design — see ARC-001).
 # - api:       FastAPI control-plane (/healthz, /runs, /topics, /internal/crawl)
-#              on :8000. In prod (Cloud Run), Cloud Scheduler POSTs
-#              /api/internal/crawl on a 12h cadence — replacing the in-stack
-#              alpine+crond "scheduler" service that lived here through Phase 3.
+#              listening on container port 8000, exposed on **host port 8088**.
+#              In prod (Cloud Run), Cloud Scheduler POSTs /api/internal/crawl
+#              on a 12h cadence — replacing the in-stack alpine+crond
+#              "scheduler" service that lived here through Phase 3.
+#
+# PORT POLICY (see README.md → "Port allocation"):
+#   Host :8088  → trend-api          (canonical for this project)
+#   Host :5173  → Vite dev server (web/)
+#   Host :5432  → trend-postgres
+#   Host :8000  → RESERVED for oMLX on macOS — never bind the API here.
+#   Host :11434 → ollama (Linux only)
 
 services:
   postgres:
@@ -58,7 +66,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://trend:trend@postgres:5432/trend_researcher
       LOG_FORMAT: json
     ports:
-      - "4000:8000"
+      - "8088:8000"
     volumes:
       # G9 persistence: dumps land here. Compose uses external Postgres, so
       # the dump path is mostly exercised by the prod image (Cloud Run + GCS),

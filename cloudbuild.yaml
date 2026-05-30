@@ -126,7 +126,7 @@ steps:
       - --timeout=600
       - --min-instances=0
       - --max-instances=1
-      - --set-env-vars=BUILD_VERSION=$TAG_NAME,BUILD_COMMIT=$COMMIT_SHA,BUILD_TIME=$BUILD_ID,CRAWLER_TOP_N=100,LOG_FORMAT=json,AUTH_SEED_USERNAME=admin
+      - --set-env-vars=BUILD_VERSION=$TAG_NAME,BUILD_COMMIT=$COMMIT_SHA,BUILD_TIME=$BUILD_ID,CRAWLER_TOP_N=100,LOG_FORMAT=json,AUTH_SEED_USERNAME=admin@app.local
       - --set-secrets=TREND_INTERNAL_PAT=trend-internal-pat:latest
       - --add-volume=name=data-volume,type=cloud-storage,bucket=${_DATA_BUCKET},readonly=false
       - --add-volume-mount=volume=data-volume,mount-path=/app/data

@@ -154,116 +154,164 @@ onMounted(load)
               The <strong>{{ activeDeptName }}</strong> department doesn't have AI settings yet.
               Initialize with sensible defaults — you can edit and save afterwards.
             </p>
-            <v-btn color="primary" :loading="initializing" @click="initialize">
+            <v-btn color="primary" variant="flat" :loading="initializing" @click="initialize">
               <v-icon start>mdi-rocket-launch-outline</v-icon>
               Initialize AI Configuration
             </v-btn>
           </v-card-text>
         </v-card>
 
-        <v-card v-else :loading="loading">
-          <v-card-text>
-            <v-text-field
-              v-model="form.base_url"
-              label="Base URL"
-              hint="Ollama or OpenAI-compatible API endpoint"
-              persistent-hint
-              class="mb-4"
-              prepend-icon="mdi-web"
-            />
-
-            <v-combobox
-              v-model="form.model"
-              :items="availableModels"
-              :loading="modelsLoading"
-              label="Model"
-              hint="Models available on the provider — or type a custom name"
-              persistent-hint
-              class="mb-4"
-              prepend-icon="mdi-brain"
-            >
-              <template #append>
-                <v-btn icon="mdi-refresh" size="small" variant="text" :loading="modelsLoading" @click="fetchModels" />
+        <template v-else>
+          <!-- Section 1: Provider connection -->
+          <v-card class="mb-4" :loading="loading">
+            <v-card-item>
+              <template #prepend>
+                <v-icon icon="mdi-server-network" color="secondary" />
               </template>
-            </v-combobox>
+              <v-card-title class="text-subtitle-1 font-weight-medium">Provider Connection</v-card-title>
+              <v-card-subtitle>Where the LLM lives</v-card-subtitle>
+            </v-card-item>
+            <v-card-text>
+              <v-text-field
+                v-model="form.base_url"
+                label="Base URL"
+                hint="Ollama or OpenAI-compatible API endpoint"
+                persistent-hint
+                class="mb-3"
+                prepend-inner-icon="mdi-web"
+              />
+              <v-combobox
+                v-model="form.model"
+                :items="availableModels"
+                :loading="modelsLoading"
+                label="Model"
+                hint="Models available on the provider — or type a custom name"
+                persistent-hint
+                class="mb-3"
+                prepend-inner-icon="mdi-brain"
+              >
+                <template #append-inner>
+                  <v-btn
+                    icon="mdi-refresh"
+                    size="small"
+                    variant="text"
+                    :loading="modelsLoading"
+                    @click.stop="fetchModels"
+                  />
+                </template>
+              </v-combobox>
+              <v-text-field
+                v-model="form.api_token"
+                label="API Token"
+                hint="Optional — leave empty for local Ollama"
+                persistent-hint
+                type="password"
+                prepend-inner-icon="mdi-key"
+              />
+            </v-card-text>
+          </v-card>
 
-            <v-text-field
-              v-model="form.api_token"
-              label="API Token"
-              hint="Optional — leave empty for local Ollama"
-              persistent-hint
-              type="password"
-              prepend-icon="mdi-key"
-              class="mb-4"
-            />
+          <!-- Section 2: Assessment criteria -->
+          <v-card class="mb-4">
+            <v-card-item>
+              <template #prepend>
+                <v-icon icon="mdi-clipboard-text-outline" color="secondary" />
+              </template>
+              <v-card-title class="text-subtitle-1 font-weight-medium">Assessment Criteria</v-card-title>
+              <v-card-subtitle>Tell the AI what matters for {{ activeDeptName }}</v-card-subtitle>
+            </v-card-item>
+            <v-card-text>
+              <v-textarea
+                v-model="form.business_context"
+                label="Business Context"
+                hint="Who you are: industry, geography, channels, scale. The AI uses this to interpret your criteria below."
+                persistent-hint
+                rows="4"
+                auto-grow
+                prepend-inner-icon="mdi-domain"
+                class="mb-3"
+              />
+              <v-textarea
+                v-model="form.opportunity_criteria"
+                label="Opportunity Criteria"
+                hint="What counts as an OPPORTUNITY? List concrete signals (one per line)."
+                persistent-hint
+                rows="5"
+                auto-grow
+                prepend-inner-icon="mdi-trending-up"
+                class="mb-3"
+              />
+              <v-textarea
+                v-model="form.risk_criteria"
+                label="Risk Criteria"
+                hint="What counts as a RISK? List concrete threats (one per line)."
+                persistent-hint
+                rows="5"
+                auto-grow
+                prepend-inner-icon="mdi-alert-octagon-outline"
+              />
+            </v-card-text>
+          </v-card>
 
-            <v-textarea
-              v-model="form.business_context"
-              label="Business Context"
-              hint="Who you are: industry, geography, channels, scale. The AI uses this to interpret your opportunity & risk criteria below."
-              persistent-hint
-              rows="4"
-              auto-grow
-              prepend-icon="mdi-domain"
-              class="mb-4"
-            />
+          <!-- Section 3: Runtime tuning -->
+          <v-card class="mb-4">
+            <v-card-item>
+              <template #prepend>
+                <v-icon icon="mdi-tune-variant" color="secondary" />
+              </template>
+              <v-card-title class="text-subtitle-1 font-weight-medium">Runtime Tuning</v-card-title>
+              <v-card-subtitle>How hard the model thinks, how long you wait</v-card-subtitle>
+            </v-card-item>
+            <v-card-text>
+              <v-select
+                v-model="form.thinking_effort"
+                :items="[
+                  { title: 'Off — fastest, no reasoning', value: 'off' },
+                  { title: 'Low — brief reasoning', value: 'low' },
+                  { title: 'Medium — moderate reasoning', value: 'medium' },
+                  { title: 'High — deep reasoning', value: 'high' },
+                ]"
+                label="Thinking Effort"
+                hint="Higher = better but slower."
+                persistent-hint
+                prepend-inner-icon="mdi-head-cog-outline"
+                class="mb-3"
+              />
+              <v-text-field
+                v-model.number="form.request_timeout_seconds"
+                type="number"
+                min="10"
+                max="3600"
+                label="Request Timeout (seconds)"
+                hint="Per-LLM-request timeout. Raise for slow local models (300–600). Default: 120."
+                persistent-hint
+                prepend-inner-icon="mdi-timer-outline"
+              />
+            </v-card-text>
+          </v-card>
 
-            <v-textarea
-              v-model="form.opportunity_criteria"
-              label="Opportunity Criteria"
-              hint="What counts as an OPPORTUNITY for this business? List concrete signals (one per line). The AI matches topics against these."
-              persistent-hint
-              rows="6"
-              auto-grow
-              prepend-icon="mdi-trending-up"
-              class="mb-4"
-            />
-
-            <v-textarea
-              v-model="form.risk_criteria"
-              label="Risk Criteria"
-              hint="What counts as a RISK for this business? List concrete threats (one per line). The AI matches topics against these."
-              persistent-hint
-              rows="6"
-              auto-grow
-              prepend-icon="mdi-alert-octagon-outline"
-              class="mb-4"
-            />
-
-            <v-select
-              v-model="form.thinking_effort"
-              :items="[
-                { title: 'Off — fastest, no reasoning', value: 'off' },
-                { title: 'Low — brief reasoning', value: 'low' },
-                { title: 'Medium — moderate reasoning', value: 'medium' },
-                { title: 'High — deep reasoning', value: 'high' },
-              ]"
-              label="Thinking Effort"
-              hint="Controls how much reasoning the model does before answering. Higher = better but slower."
-              persistent-hint
-              prepend-icon="mdi-head-cog-outline"
-            />
-
-            <v-text-field
-              v-model.number="form.request_timeout_seconds"
-              type="number"
-              min="10"
-              max="3600"
-              label="Request Timeout (seconds)"
-              hint="Per-LLM-request timeout in seconds. Increase for slow local models on CPU (e.g. 300–600). Default: 120."
-              persistent-hint
-              prepend-icon="mdi-timer-outline"
-              class="mt-4"
-            />
-          </v-card-text>
-
-          <v-card-actions>
+          <!-- Sticky save bar -->
+          <div
+            class="d-flex align-center pa-3 mb-4 rounded-lg"
+            style="position: sticky; bottom: 16px; background: rgb(var(--v-theme-surface)); box-shadow: 0 -2px 8px rgba(0,0,0,0.08); z-index: 2;"
+          >
+            <span class="text-caption text-medium-emphasis">
+              Changes save to <strong>{{ activeDeptName }}</strong>
+            </span>
             <v-spacer />
-            <v-btn color="primary" :loading="saving" :disabled="loading" @click="save">
+            <v-btn
+              color="primary"
+              variant="flat"
+              size="large"
+              prepend-icon="mdi-content-save-outline"
+              :loading="saving"
+              :disabled="loading"
+              @click="save"
+            >
               Save Configuration
             </v-btn>
-          </v-card-actions>
-        </v-card>
+          </div>
+        </template>
 
         <v-card class="mt-4" variant="outlined" v-if="!isEmpty && availableModels.length > 0">
           <v-card-title class="text-subtitle-1">

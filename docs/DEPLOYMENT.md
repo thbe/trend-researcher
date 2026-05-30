@@ -99,7 +99,7 @@ Maximum data loss window: ~30 seconds (debounce interval).
 | `BUILD_TIME` | `$BUILD_ID` | Build identifier |
 | `CRAWLER_TOP_N` | `100` | Items per source to crawl |
 | `LOG_FORMAT` | `json` | Structured logging |
-| `AUTH_SEED_USERNAME` | `admin` | Default admin user seeded on first boot |
+| `AUTH_SEED_USERNAME` | `admin@app.local` | Default admin user seeded on first boot (lowercased on seed) |
 
 ### Internal (set by entrypoint/Dockerfile, not overridden)
 

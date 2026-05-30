@@ -17,7 +17,7 @@ async function onLogout() {
 </script>
 
 <template>
-  <v-app-bar color="secondary" density="comfortable" flat>
+  <v-app-bar color="surface" density="comfortable" elevation="1" border>
     <v-app-bar-nav-icon
       v-if="session.isAuthenticated"
       @click="emit('update:modelValue', !modelValue)"
@@ -25,11 +25,11 @@ async function onLogout() {
     <v-app-bar-title>
       <router-link
         to="/dashboard"
-        class="d-inline-flex align-center text-inherit"
+        class="d-inline-flex align-center"
         style="text-decoration: none; color: inherit; cursor: pointer"
       >
-        <v-icon icon="mdi-database-outline" class="mr-2" />
-        {{ STRINGS.APP_NAME }}
+        <v-icon icon="mdi-database-outline" color="primary" class="mr-2" />
+        <span class="text-h6 font-weight-medium">{{ STRINGS.APP_NAME }}</span>
       </router-link>
     </v-app-bar-title>
 

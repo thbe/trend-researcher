@@ -135,10 +135,15 @@ onUnmounted(stopPolling)
         </div>
       </div>
       <v-spacer />
-      <v-chip-group v-model="categoryFilter" class="mr-4" @update:modelValue="onFilterChange">
-        <v-chip value="opportunity" color="success" variant="tonal" filter>Opportunities</v-chip>
-        <v-chip value="risk" color="error" variant="tonal" filter>Risks</v-chip>
-        <v-chip value="neutral" color="grey" variant="tonal" filter>Neutral</v-chip>
+      <v-chip-group
+        v-model="categoryFilter"
+        selected-class="text-primary"
+        class="mr-4"
+        @update:modelValue="onFilterChange"
+      >
+        <v-chip value="opportunity" color="success" variant="tonal" filter prepend-icon="mdi-trending-up">Opportunities</v-chip>
+        <v-chip value="risk" color="error" variant="tonal" filter prepend-icon="mdi-alert-outline">Risks</v-chip>
+        <v-chip value="neutral" color="grey" variant="tonal" filter prepend-icon="mdi-circle-outline">Neutral</v-chip>
       </v-chip-group>
       <FrameworkPicker
         v-model="selectedFrameworkId"
@@ -148,6 +153,7 @@ onUnmounted(stopPolling)
       />
       <v-btn
         color="primary"
+        variant="flat"
         prepend-icon="mdi-brain"
         :loading="assessing"
         :disabled="assessing || !session.canAssess"

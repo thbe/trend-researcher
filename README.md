@@ -94,7 +94,7 @@ uv run alembic upgrade head
 ### 4. Start the API server
 
 ```bash
-uv run uvicorn api.main:app --reload --port 8000
+uv run uvicorn api.main:app --reload --port 8088
 ```
 
 ### 5. Run the crawler (one-shot)
@@ -122,7 +122,19 @@ docker compose up                              # Linux et al.: full stack incl. 
 docker compose up postgres api crawler         # macOS: skip Ollama, use oMLX on host
 ```
 
-This starts PostgreSQL, the API (port 4000 -> 8000 with the SPA), and runs a one-shot crawl.
+This starts PostgreSQL, the API (host port **8088** → container 8000, with the SPA), and runs a one-shot crawl.
+
+### Port allocation
+
+| Host port | Service | Notes |
+|-----------|---------|-------|
+| `8088` | `trend-api` | **Canonical** — `http://localhost:8088/` (UI + `/api/*`) |
+| `5173` | Vite dev server (`web/`) | Proxies `/api/*` → `:8088` |
+| `5432` | `trend-postgres` | |
+| `11434` | `ollama` | Linux only |
+| `8000` | **Reserved — oMLX on macOS** ([omlx.ai](https://omlx.ai/)) | Never bind the API here; the assessor talks to oMLX at `http://127.0.0.1:8000/v1`. |
+
+The API container internally listens on `8000` (Cloud Run / prod convention) but is **always** published on host `:8088` locally so it never collides with oMLX.
 
 **LLM backend defaults:**
 - **Default (Linux / non-macOS)** — the bundled `ollama/ollama` container at `http://ollama:11434` (`qwen3.5:latest`). No extra setup.
@@ -158,7 +170,9 @@ All routes are prefixed with `/api`.
 
 **Auth:** All `/api/*` routes except `/api/login` and `/api/healthz` require an authenticated session cookie.
 
-**Default credentials:** `admin` / `0nly4%Testing`
+**Default credentials:** `admin@app.local` / `0nly4%Testing`
+
+> The default seed username is the email-style local-admin account `admin@app.local` (not bare `admin`). Override via `AUTH_SEED_USERNAME` / `AUTH_SEED_PASSWORD` env vars before first boot. Usernames are normalized to lowercase (see Alembic `0021_lowercase_usernames`).
 
 ## Configuration
 
@@ -170,13 +184,13 @@ All routes are prefixed with `/api`.
 | `CRAWLER_TOP_N` | Items per source per crawl | `100` |
 | `LOG_FORMAT` | Log output format (`json` or `text`) | `json` |
 | `AUTH_SECRET_KEY` | HMAC-SHA256 key for session cookies | (auto-generated) |
-| `AUTH_SEED_USERNAME` | Initial admin username | `admin` |
+| `AUTH_SEED_USERNAME` | Initial admin username (lowercased on seed) | `admin@app.local` |
 | `AUTH_SEED_PASSWORD` | Initial admin password | `0nly4%Testing` |
 | `TREND_INTERNAL_PAT` | Bearer token for internal endpoints | — |
 | `WEB_DIST_DIR` | Path to built SPA assets | — |
 | `DB_DUMP_SCRIPT` | Script path for post-write DB dumps | — |
 | `PERSIST_DIR` | Data directory for embedded PG | `/app/data` |
-| `PORT` | API listen port | `8000` |
+| `PORT` | API listen port (inside container) | `8000` (host-mapped to `8088` — see "Port allocation") |
 
 ### Crawl Configuration
 

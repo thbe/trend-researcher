@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useDisplay } from 'vuetify'
 import { useRoute, useRouter } from 'vue-router'
 import { listTopics, type Topic } from '@/api/topics'
 import { assessBatch } from '@/api/assessment'
@@ -20,6 +21,7 @@ interface DataTableOptions {
 
 const router = useRouter()
 const route = useRoute()
+const { mobile } = useDisplay()
 
 // Restore list state from URL query so back-navigation from a detail view
 // returns the user to the exact page, page size, and sort they had open.
@@ -209,20 +211,22 @@ onMounted(() => {
       </div>
       <v-spacer />
       <v-btn
-        color="primary"
+        color="secondary"
         variant="tonal"
         :loading="crawling"
         :disabled="crawling || assessing"
         class="mr-2"
+        prepend-icon="mdi-refresh"
         @click="triggerCrawl"
       >
         Refresh Topics
       </v-btn>
       <v-btn
-        color="secondary"
-        variant="tonal"
+        color="primary"
+        variant="flat"
         :loading="assessing"
         :disabled="crawling || assessing"
+        prepend-icon="mdi-brain"
         @click="triggerAssess"
       >
         Assess Topics
@@ -249,6 +253,7 @@ onMounted(() => {
     />
 
     <v-data-table-server
+      v-if="!mobile"
       :headers="headers"
       :items="items"
       :items-length="totalItems"
@@ -298,6 +303,70 @@ onMounted(() => {
         {{ formatRelative(item.last_seen_at) }}
       </template>
     </v-data-table-server>
+
+    <!-- Mobile card-list fallback: <600px the data-table cramps 8 columns
+         into ~375px making titles wrap to 8+ lines. A card per topic gives
+         each item full width with the same data still scannable. -->
+    <div v-else>
+      <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-3" />
+      <div v-if="!loading && items.length === 0" class="text-center text-medium-emphasis py-8">
+        No topics yet — run the crawler to populate the store.
+      </div>
+      <v-card
+        v-for="t in items"
+        :key="t.id"
+        variant="outlined"
+        class="mb-3"
+        @click="router.push({ name: 'topic-detail', params: { id: t.id } })"
+      >
+        <v-card-item>
+          <div class="d-flex align-start ga-2">
+            <div class="flex-grow-1">
+              <div class="text-body-1 font-weight-medium">{{ t.title }}</div>
+              <div v-if="t.description" class="text-caption text-medium-emphasis mt-1">
+                {{ truncate(t.description, 100) }}
+              </div>
+            </div>
+            <v-chip
+              v-if="t.relevance_verdict"
+              :color="t.relevance_verdict === 'relevant' ? 'success' : 'grey'"
+              size="x-small"
+              variant="tonal"
+              label
+            >
+              {{ t.relevance_verdict }}
+            </v-chip>
+          </div>
+          <div class="d-flex flex-wrap ga-3 mt-3 text-caption text-medium-emphasis">
+            <span>
+              <v-icon icon="mdi-source-branch" size="14" class="mr-1" />
+              {{ t.breadth }} src
+            </span>
+            <span>
+              <v-icon icon="mdi-clock-outline" size="14" class="mr-1" />
+              {{ formatLongevity(t.longevity_seconds) }}
+            </span>
+            <span>
+              <v-icon icon="mdi-eye-outline" size="14" class="mr-1" />
+              {{ formatRelative(t.last_seen_at) }}
+            </span>
+            <span>
+              <v-icon icon="mdi-counter" size="14" class="mr-1" />
+              {{ t.observation_count }}
+            </span>
+          </div>
+        </v-card-item>
+      </v-card>
+      <v-pagination
+        v-if="totalItems > itemsPerPage"
+        v-model="page"
+        :length="Math.ceil(totalItems / itemsPerPage)"
+        :total-visible="5"
+        density="comfortable"
+        class="mt-4"
+        @update:model-value="(p: number) => onUpdateOptions({ page: p, itemsPerPage, sortBy })"
+      />
+    </div>
   </div>
 </template>
 

@@ -47,34 +47,44 @@ async function handleLogin() {
 <template>
   <v-container class="fill-height" fluid>
     <v-row align="center" justify="center">
-      <v-col cols="12" sm="8" md="4">
-        <v-card class="elevation-12">
-          <v-toolbar color="primary" dark flat>
-            <v-toolbar-title>Trend Researcher</v-toolbar-title>
-          </v-toolbar>
-          <v-card-text>
+      <v-col cols="12" sm="8" md="5" lg="4">
+        <v-card class="elevation-8" rounded="lg">
+          <v-card-item class="pa-6 pb-2">
+            <div class="d-flex align-center">
+              <v-icon icon="mdi-database-outline" color="primary" size="32" class="mr-3" />
+              <div>
+                <div class="text-h5 font-weight-medium">Trend Researcher</div>
+                <div class="text-caption text-medium-emphasis">Sign in to continue</div>
+              </div>
+            </div>
+          </v-card-item>
+          <v-card-text class="pa-6 pt-4">
             <v-form @submit.prevent="handleLogin">
               <v-text-field
                 v-model="username"
                 label="Username"
-                prepend-icon="mdi-account"
+                prepend-inner-icon="mdi-account"
                 autocomplete="username"
                 :disabled="loading"
+                class="mb-2"
               />
               <v-text-field
                 v-model="password"
                 label="Password"
-                prepend-icon="mdi-lock"
+                prepend-inner-icon="mdi-lock"
                 type="password"
                 autocomplete="current-password"
                 :disabled="loading"
+                class="mb-2"
               />
-              <v-alert v-if="error" type="error" density="compact" class="mb-4">
+              <v-alert v-if="error" type="error" density="compact" variant="tonal" class="mb-4">
                 {{ error }}
               </v-alert>
               <v-btn
                 type="submit"
                 color="primary"
+                variant="flat"
+                size="large"
                 block
                 :loading="loading"
                 :disabled="!username || !password"
