@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func, text, and_, exists, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import (
@@ -21,7 +21,7 @@ from api.dependencies import (
     get_session,
     require_role,
 )
-from core.models import DepartmentSource, Topic, TopicSource
+from core.models import CrawlConfig, DepartmentSource, Topic, TopicSource
 
 router = APIRouter()
 
@@ -48,19 +48,41 @@ async def get_dashboard(
     dept_id = ad.department.id
 
     # Total topics visible to this dept: those with at least one TopicSource
-    # row whose source_name is enabled for this dept in department_sources.
-    total_topics_stmt = (
-        select(func.count(func.distinct(Topic.id)))
-        .select_from(Topic)
-        .join(TopicSource, TopicSource.topic_id == Topic.id)
-        .join(
+    # row whose source is either (a) explicitly enabled for this dept in
+    # department_sources, OR (b) OWNED by this dept (crawl_config.department_id).
+    # Mirrors the list_topics predicate (commit a60d8ea) so owned-source topics
+    # count toward the dashboard total even without an explicit subscription row.
+    dept_source_exists = exists(
+        select(1)
+        .select_from(TopicSource)
+        .outerjoin(
             DepartmentSource,
-            DepartmentSource.source_name == TopicSource.source_name,
+            and_(
+                DepartmentSource.source_name == TopicSource.source_name,
+                DepartmentSource.department_id == dept_id,
+            ),
+        )
+        .outerjoin(
+            CrawlConfig,
+            CrawlConfig.source_name == TopicSource.source_name,
         )
         .where(
-            DepartmentSource.department_id == dept_id,
-            DepartmentSource.enabled.is_(True),
+            TopicSource.topic_id == Topic.id,
+            or_(
+                and_(
+                    DepartmentSource.department_id == dept_id,
+                    DepartmentSource.enabled.is_(True),
+                ),
+                CrawlConfig.department_id == dept_id,
+            ),
         )
+        .correlate(Topic)
+    )
+
+    total_topics_stmt = (
+        select(func.count(Topic.id))
+        .select_from(Topic)
+        .where(dept_source_exists)
     )
     total_topics = (await session.execute(total_topics_stmt)).scalar() or 0
 

@@ -257,17 +257,35 @@ async def get_topic(
 
     dept_id = ad.department.id
 
+    # Mirror list_topics predicate (commit a60d8ea): visible when the topic has
+    # at least one TopicSource whose source is either (a) explicitly enabled
+    # for the active dept via department_sources, OR (b) OWNED by the active
+    # dept (crawl_config.department_id). Without the ownership branch, a dept's
+    # own sources 404 on detail even though they appear in the list — broke
+    # IT dept clicking heise-de topics after the merge.
     dept_source_exists = exists(
         select(1)
         .select_from(TopicSource)
-        .join(
+        .outerjoin(
             DepartmentSource,
-            DepartmentSource.source_name == TopicSource.source_name,
+            and_(
+                DepartmentSource.source_name == TopicSource.source_name,
+                DepartmentSource.department_id == dept_id,
+            ),
+        )
+        .outerjoin(
+            CrawlConfig,
+            CrawlConfig.source_name == TopicSource.source_name,
         )
         .where(
             TopicSource.topic_id == Topic.id,
-            DepartmentSource.department_id == dept_id,
-            DepartmentSource.enabled.is_(True),
+            or_(
+                and_(
+                    DepartmentSource.department_id == dept_id,
+                    DepartmentSource.enabled.is_(True),
+                ),
+                CrawlConfig.department_id == dept_id,
+            ),
         )
         .correlate(Topic)
     )
