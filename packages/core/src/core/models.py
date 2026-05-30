@@ -623,6 +623,11 @@ class AIConfig(Base):
         ForeignKey("departments.id", ondelete="CASCADE"),
         primary_key=True,
     )
+    # ``provider`` chooses the adapter explicitly (see migration 0023). One
+    # of: ``ollama`` | ``openai`` | ``anthropic``. ``openai`` covers any
+    # OpenAI-compatible endpoint: hosted OpenAI, oMLX, LM Studio, vLLM,
+    # llama.cpp server, etc. — ``base_url`` must point at the ``/v1`` root.
+    provider: Mapped[str] = mapped_column(Text, nullable=False, server_default="ollama")
     base_url: Mapped[str] = mapped_column(Text, nullable=False, default="http://ollama:11434")
     model: Mapped[str] = mapped_column(Text, nullable=False, default="qwen3.5:latest")
     api_token: Mapped[str | None] = mapped_column(Text, nullable=True)

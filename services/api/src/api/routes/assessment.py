@@ -51,6 +51,7 @@ async def _build_pipeline(session_factory, department_id: str):
         ai_config = result.scalar_one_or_none()
 
     if ai_config:
+        provider = ai_config.provider
         base_url = ai_config.base_url
         model = ai_config.model
         api_token = ai_config.api_token
@@ -61,6 +62,7 @@ async def _build_pipeline(session_factory, department_id: str):
         request_timeout_seconds = ai_config.request_timeout_seconds or 120
     else:
         settings = get_settings()
+        provider = settings.llm_provider
         base_url = settings.llm_base_url
         model = settings.llm_model
         api_token = settings.llm_api_key
@@ -70,17 +72,17 @@ async def _build_pipeline(session_factory, department_id: str):
         risk_criteria = None
         request_timeout_seconds = 120
 
-    # Provider detection order:
-    #   1. Anthropic — hosted only, identified by domain.
-    #   2. OpenAI-compatible — any endpoint exposing `/v1`. Covers oMLX, LM
-    #      Studio, vLLM, llama.cpp server, and hosted OpenAI itself.
-    #   3. Ollama — default fallback (uses /api/chat, not /v1).
-    base_url_lc = (base_url or "").lower()
-    if "anthropic" in base_url_lc:
+    # Provider dispatch is now driven by the ``provider`` column (migration
+    # 0023) — no more URL sniffing. ``openai`` covers any OpenAI-compatible
+    # endpoint (hosted OpenAI, oMLX, LM Studio, vLLM, llama.cpp server) and
+    # expects ``base_url`` to already include the ``/v1`` root.
+    if provider == "anthropic":
         llm = AnthropicAdapter(api_key=api_token or "", default_model=model)
-    elif "/v1" in base_url_lc or "openai" in base_url_lc:
+    elif provider == "openai":
         llm = OpenAIAdapter(base_url=base_url, api_key=api_token or "no-key", default_model=model)
     else:
+        # ``ollama`` and any unknown value fall back to the historical
+        # default — the adapter targets the native ``/api/chat`` endpoint.
         llm = OllamaAdapter(
             base_url=base_url,
             default_model=model,

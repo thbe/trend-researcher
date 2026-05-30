@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { getAIConfig, updateAIConfig, listAvailableModels, type AIConfig } from '@/api/aiConfig'
+import { getAIConfig, updateAIConfig, listAvailableModels, type AIConfig, type AIProvider } from '@/api/aiConfig'
 import { useSessionStore } from '@/stores/session'
 
 const session = useSessionStore()
@@ -18,6 +18,7 @@ const isEmpty = ref(false)
 
 // Form fields
 const form = ref({
+  provider: 'ollama' as AIProvider,
   base_url: '',
   model: '',
   api_token: '',
@@ -28,6 +29,25 @@ const form = ref({
   request_timeout_seconds: 120,
 })
 
+// Provider catalogue — drives the dropdown + hint text. Keep in sync with
+// the backend ``provider`` enum (assessment.py / migration 0023).
+const providerOptions = [
+  { title: 'Ollama — local /api/chat (no /v1 suffix)', value: 'ollama' },
+  { title: 'OpenAI-compatible — /v1 endpoint (oMLX, LM Studio, vLLM, OpenAI)', value: 'openai' },
+  { title: 'Anthropic — hosted Claude', value: 'anthropic' },
+]
+
+const baseUrlHint = computed(() => {
+  switch (form.value.provider) {
+    case 'openai':
+      return 'OpenAI-compatible /v1 root, e.g. http://host.docker.internal:8000/v1 for oMLX'
+    case 'anthropic':
+      return 'Anthropic API base, usually https://api.anthropic.com'
+    default:
+      return 'Ollama base URL, e.g. http://ollama:11434 inside the Compose network'
+  }
+})
+
 // Available models from provider
 const availableModels = ref<string[]>([])
 const modelsLoading = ref(false)
@@ -35,6 +55,7 @@ const modelsLoading = ref(false)
 function applyConfig(cfg: AIConfig) {
   config.value = cfg
   form.value = {
+    provider: cfg.provider,
     base_url: cfg.base_url,
     model: cfg.model,
     api_token: cfg.api_token ?? '',
@@ -73,6 +94,7 @@ async function initialize() {
   error.value = null
   try {
     const cfg = await updateAIConfig({
+      provider: 'ollama',
       base_url: 'http://localhost:11434',
       model: 'llama3',
       thinking_effort: 'off',
@@ -108,6 +130,7 @@ async function save() {
   success.value = null
   try {
     const cfg = await updateAIConfig({
+      provider: form.value.provider,
       base_url: form.value.base_url,
       model: form.value.model,
       api_token: form.value.api_token || null,
@@ -172,10 +195,19 @@ onMounted(load)
               <v-card-subtitle>Where the LLM lives</v-card-subtitle>
             </v-card-item>
             <v-card-text>
+              <v-select
+                v-model="form.provider"
+                :items="providerOptions"
+                label="Provider"
+                hint="Picks the adapter explicitly — no URL sniffing."
+                persistent-hint
+                class="mb-3"
+                prepend-inner-icon="mdi-chip"
+              />
               <v-text-field
                 v-model="form.base_url"
                 label="Base URL"
-                hint="Ollama or OpenAI-compatible API endpoint"
+                :hint="baseUrlHint"
                 persistent-hint
                 class="mb-3"
                 prepend-inner-icon="mdi-web"

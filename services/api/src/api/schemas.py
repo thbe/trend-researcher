@@ -254,6 +254,7 @@ class AIConfigResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    provider: str
     base_url: str
     model: str
     api_token: str | None
@@ -268,6 +269,7 @@ class AIConfigResponse(BaseModel):
 class AIConfigUpdateRequest(BaseModel):
     """Update AI config fields."""
 
+    provider: str | None = None
     base_url: str | None = None
     model: str | None = None
     api_token: str | None = None

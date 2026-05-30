@@ -10,7 +10,10 @@
 
 import { request, ApiError } from './client'
 
+export type AIProvider = 'ollama' | 'openai' | 'anthropic'
+
 export interface AIConfig {
+  provider: AIProvider
   base_url: string
   model: string
   api_token: string | null
@@ -23,6 +26,7 @@ export interface AIConfig {
 }
 
 export interface AIConfigUpdate {
+  provider?: AIProvider
   base_url?: string
   model?: string
   api_token?: string | null

@@ -83,6 +83,7 @@ async def update_ai_config(
         # defaults cover anything they omit.
         row = AIConfig(department_id=dept_id)
         for field in (
+            "provider",
             "base_url",
             "model",
             "api_token",
@@ -111,6 +112,9 @@ async def update_ai_config(
 
     # Update path
     touched = False
+    if body.provider is not None:
+        existing.provider = body.provider
+        touched = True
     if body.base_url is not None:
         existing.base_url = body.base_url
         touched = True
@@ -168,8 +172,28 @@ async def list_available_models(
         )
 
     base_url = row.base_url.rstrip("/")
+    provider = row.provider
     try:
         async with httpx.AsyncClient(timeout=10) as client:
+            if provider == "openai":
+                # OpenAI-compatible: GET /v1/models — base_url already includes /v1.
+                headers = {"Authorization": f"Bearer {row.api_token}"} if row.api_token else {}
+                resp = await client.get(f"{base_url}/models", headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
+                # OpenAI shape: {"data": [{"id": "...", ...}, ...]}
+                items = data.get("data", []) if isinstance(data, dict) else []
+                return [
+                    {"name": m.get("id"), "size": None, "modified_at": None}
+                    for m in items
+                    if m.get("id")
+                ]
+            if provider == "anthropic":
+                # Anthropic does not expose a public ``/models`` listing on
+                # most plans — return an empty list so the UI lets users
+                # type model names manually.
+                return []
+            # Default: ollama native /api/tags.
             resp = await client.get(f"{base_url}/api/tags")
             resp.raise_for_status()
             data = resp.json()
