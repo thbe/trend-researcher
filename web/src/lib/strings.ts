@@ -28,10 +28,10 @@ export const STRINGS = {
   NAV_TOPICS: 'Topics',
   NAV_ASSESSMENT: 'Assess',
   NAV_AI_CONFIG: 'AI Config',
-  NAV_SOURCE_SUBSCRIPTIONS: 'Source Subscriptions',
+  NAV_SOURCE_SUBSCRIPTIONS: 'Sources — Subscriptions',
   NAV_FRAMEWORK_SETTINGS: 'Framework Settings',
   NAV_ADMIN: 'Admin',
-  NAV_CRAWL_CONFIG: 'Crawl Config',
+  NAV_CRAWL_CONFIG: 'Sources — Connectors',
 
   // Buttons / key labels
   BTN_SIGN_IN: 'Sign In',

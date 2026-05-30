@@ -26,6 +26,9 @@ import {
   type DepartmentRole,
   type Member,
 } from '@/api/departments'
+import { useSessionStore } from '@/stores/session'
+
+const session = useSessionStore()
 
 const route = useRoute()
 const router = useRouter()
@@ -92,6 +95,10 @@ async function doAdd() {
     success.value = 'Member added'
     addForm.value = { user_id: '', role: 'viewer' }
     await load()
+    // Refresh session: if the added user happens to be the current user,
+    // their departments list grows; safe to always refresh on superadmin
+    // membership changes.
+    await session.refresh()
   } catch (e: any) {
     error.value = e.message || 'Failed to add member'
   } finally {
@@ -132,6 +139,9 @@ async function doRemove() {
     success.value = `Removed ${removeTarget.value.username}`
     removeDialog.value = false
     await load()
+    // Refresh session in case the current user was removed from this dept;
+    // ensures the switcher and X-Active-Department header stay coherent.
+    await session.refresh()
   } catch (e: any) {
     // 409 → last dept_lead constraint
     error.value = e.message || 'Failed to remove member'

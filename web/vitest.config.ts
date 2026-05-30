@@ -18,6 +18,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     include: ['src/**/*.spec.ts'],
+    // jsdom + Node 22 doesn't ship a usable localStorage. test-setup.ts
+    // installs a minimal in-memory Storage shim so session/store tests run.
+    setupFiles: ['./test-setup.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
