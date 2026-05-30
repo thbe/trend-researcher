@@ -179,6 +179,11 @@ async def list_available_models(
                 # OpenAI-compatible: GET /v1/models — base_url already includes /v1.
                 headers = {"Authorization": f"Bearer {row.api_token}"} if row.api_token else {}
                 resp = await client.get(f"{base_url}/models", headers=headers)
+                # Auth-required providers (e.g. oMLX with API key) return 401/403
+                # when the token is missing or wrong. Don't 502 — return [] so the
+                # UI can still render the dropdown; user fixes the token and retries.
+                if resp.status_code in (401, 403):
+                    return []
                 resp.raise_for_status()
                 data = resp.json()
                 # OpenAI shape: {"data": [{"id": "...", ...}, ...]}

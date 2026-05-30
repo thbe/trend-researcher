@@ -52,6 +52,21 @@ const baseUrlHint = computed(() => {
 const availableModels = ref<string[]>([])
 const modelsLoading = ref(false)
 
+// Always include the currently saved model in the dropdown so it stays
+// visible even when the provider couldn't be listed (e.g. oMLX 401 without
+// an API token). De-dupes if it's also in the fetched list.
+const modelOptions = computed(() => {
+  const set = new Set(availableModels.value)
+  if (form.value.model) set.add(form.value.model)
+  return Array.from(set).sort()
+})
+
+const modelHint = computed(() => {
+  if (availableModels.value.length > 0) return 'Pick a model available on the provider'
+  if (form.value.provider === 'anthropic') return 'Anthropic does not list models — type the model name (e.g. claude-3-5-sonnet-latest)'
+  return 'Set an API token if required, then click refresh to load models'
+})
+
 function applyConfig(cfg: AIConfig) {
   config.value = cfg
   form.value = {
@@ -212,15 +227,16 @@ onMounted(load)
                 class="mb-3"
                 prepend-inner-icon="mdi-web"
               />
-              <v-combobox
+              <v-select
                 v-model="form.model"
-                :items="availableModels"
+                :items="modelOptions"
                 :loading="modelsLoading"
                 label="Model"
-                hint="Models available on the provider — or type a custom name"
+                :hint="modelHint"
                 persistent-hint
                 class="mb-3"
                 prepend-inner-icon="mdi-brain"
+                :no-data-text="modelsLoading ? 'Loading…' : 'No models available — set an API token then refresh'"
               >
                 <template #append-inner>
                   <v-btn
@@ -231,7 +247,7 @@ onMounted(load)
                     @click.stop="fetchModels"
                   />
                 </template>
-              </v-combobox>
+              </v-select>
               <v-text-field
                 v-model="form.api_token"
                 label="API Token"
