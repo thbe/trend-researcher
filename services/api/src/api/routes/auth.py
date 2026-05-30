@@ -1,8 +1,8 @@
-"""Login API route — POST /api/login."""
+"""Auth API routes — POST /api/login, POST /api/logout, GET /api/me."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +21,47 @@ router = APIRouter()
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+async def _resolve_login_payload(
+    user: User, session: AsyncSession
+) -> LoginResponse:
+    """Build the full LoginResponse payload for ``user`` from fresh DB state.
+
+    Shared by ``/api/login`` and ``/api/me`` so the SPA can refresh its
+    session cache (departments, role memberships, superadmin flag) without
+    a re-login whenever the server state changes (eg. an admin creates a
+    new department or grants a role).
+    """
+    if user.is_superadmin:
+        # Superadmin sees ALL departments with a synthesised dept_lead role.
+        dept_rows = (
+            await session.execute(select(Department).order_by(Department.created_at))
+        ).scalars().all()
+        departments = [
+            LoginDepartment(id=d.id, name=d.name, slug=d.slug, role="dept_lead")
+            for d in dept_rows
+        ]
+    else:
+        membership_rows = (
+            await session.execute(
+                select(UserDepartment, Department)
+                .join(Department, Department.id == UserDepartment.department_id)
+                .where(UserDepartment.user_id == user.id)
+                .order_by(Department.created_at)
+            )
+        ).all()
+        departments = [
+            LoginDepartment(id=d.id, name=d.name, slug=d.slug, role=ud.role)
+            for ud, d in membership_rows
+        ]
+
+    return LoginResponse(
+        ok=True,
+        username=user.username,
+        is_superadmin=user.is_superadmin,
+        departments=departments,
+    )
 
 
 @router.post("/login")
@@ -49,35 +90,7 @@ async def login(
 
     # Phase 10: include departments + superadmin flag so SPA can populate
     # the department switcher without a follow-up roundtrip.
-    if user.is_superadmin:
-        # Superadmin sees all departments with a synthesised dept_lead role.
-        dept_rows = (
-            await session.execute(select(Department).order_by(Department.created_at))
-        ).scalars().all()
-        departments = [
-            LoginDepartment(id=d.id, name=d.name, slug=d.slug, role="dept_lead")
-            for d in dept_rows
-        ]
-    else:
-        membership_rows = (
-            await session.execute(
-                select(UserDepartment, Department)
-                .join(Department, Department.id == UserDepartment.department_id)
-                .where(UserDepartment.user_id == user.id)
-                .order_by(Department.created_at)
-            )
-        ).all()
-        departments = [
-            LoginDepartment(id=d.id, name=d.name, slug=d.slug, role=ud.role)
-            for ud, d in membership_rows
-        ]
-
-    payload = LoginResponse(
-        ok=True,
-        username=user.username,
-        is_superadmin=user.is_superadmin,
-        departments=departments,
-    )
+    payload = await _resolve_login_payload(user, session)
     response = JSONResponse(payload.model_dump(mode="json"))
     response.set_cookie(
         key=COOKIE_NAME,
@@ -99,12 +112,39 @@ async def logout() -> JSONResponse:
 
 
 @router.get("/me")
-async def me() -> JSONResponse:
-    """Return 200 if session is valid (used by SPA auth guard).
+async def me(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> JSONResponse:
+    """Return the current user's session payload (full LoginResponse shape).
 
-    The middleware already validates the cookie — if we reach here, it's valid.
+    Used by the SPA both as a cookie liveness probe (legacy) and as the
+    authoritative source for session state on hydrate/refresh. Re-reads
+    departments + role memberships from the DB on every call so the SPA
+    self-heals after admin mutations (eg. creating a department, granting
+    a role) without requiring the user to log out and back in.
+
+    The auth middleware has already validated the cookie before reaching
+    this handler and stored the username on ``request.state.user``. If
+    the cookie referenced a user that has since been deleted/deactivated,
+    we return 401 so the SPA bounces to /login.
     """
-    return JSONResponse({"ok": True})
+    username = getattr(request.state, "user", None)
+    if not username:
+        # Middleware should have rejected this already; defensive 401.
+        return JSONResponse({"detail": "Authentication required"}, status_code=401)
+
+    result = await session.execute(
+        select(User).where(User.username == username, User.is_active.is_(True))
+    )
+    user = result.scalar_one_or_none()
+    if user is None:
+        return JSONResponse(
+            {"detail": "Session user no longer exists"}, status_code=401
+        )
+
+    payload = await _resolve_login_payload(user, session)
+    return JSONResponse(payload.model_dump(mode="json"))
 
 
 __all__ = ["router"]

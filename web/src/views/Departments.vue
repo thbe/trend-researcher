@@ -17,6 +17,10 @@ import {
   type Department,
 } from '@/api/departments'
 
+import { useSessionStore } from '@/stores/session'
+
+const session = useSessionStore()
+
 const router = useRouter()
 
 const departments = ref<Department[]>([])
@@ -78,6 +82,9 @@ async function doCreate() {
     success.value = `Department "${createForm.value.name}" created`
     createDialog.value = false
     await load()
+    // Superadmin's session payload includes ALL departments — refresh so
+    // the new dept shows up in the AppBar switcher right away.
+    await session.refresh()
   } catch (e: any) {
     error.value = e.message || 'Failed to create department'
   } finally {
@@ -124,6 +131,7 @@ async function doDelete() {
     success.value = `Department "${deleteTarget.value.name}" deleted`
     deleteDialog.value = false
     await load()
+    await session.refresh()
   } catch (e: any) {
     // 409 → last default dept or other backend constraint
     error.value = e.message || 'Failed to delete department'

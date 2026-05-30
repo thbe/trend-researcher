@@ -1,14 +1,14 @@
 // Pinia store: session — user, departments, active department, active role.
 //
-// Backend integration notes (adapted from plan vs reality discoveries):
+// Backend integration notes:
 //   * The auth API surface is FLAT: POST /api/login, POST /api/logout,
 //     GET /api/me. There is NO /api/auth/me with a body and NO
 //     /api/auth/switch-department endpoint.
-//   * /api/me returns ONLY {ok: true} once the cookie is validated. It
-//     does NOT echo back user / departments. Therefore the SPA caches the
-//     full LoginResponse to localStorage['session'] at login time and
-//     rehydrates from that cache after a page reload, using GET /api/me
-//     purely as a cookie liveness probe.
+//   * /api/me returns the SAME shape as POST /api/login (full LoginResponse)
+//     so the SPA can re-sync session state without forcing the user to log
+//     out and back in. The SPA still keeps a localStorage cache so a page
+//     reload renders instantly while /api/me is in-flight, but /api/me is
+//     the authoritative source — its response overwrites the cache.
 //   * Switching departments is PURE client-side state: update Pinia +
 //     localStorage. Every subsequent API call carries the new value via
 //     the X-Active-Department header injected by api/client.ts.
@@ -157,8 +157,10 @@ export const useSessionStore = defineStore('session', {
     },
 
     /**
-     * Probe /api/me to verify the auth cookie, then rehydrate user +
-     * departments from the localStorage cache written at login time.
+     * Probe /api/me to verify the auth cookie AND fetch the current
+     * user + departments fresh from the backend. The response shape is
+     * identical to POST /api/login, so we replay it through
+     * applyLoginResponse() to populate state and the cache.
      *
      * Returns true if the session is usable; false if the user must log in.
      * Never throws on auth failure — callers (router guard, app mount)
@@ -179,6 +181,10 @@ export const useSessionStore = defineStore('session', {
           this.hydrated = false
           return this.user !== null
         }
+        // Authoritative path: /api/me returned a fresh LoginResponse.
+        const payload = (await res.json()) as LoginPayload
+        this.applyLoginResponse(payload)
+        return true
       } catch {
         // Network failure: optimistically keep cached state so an offline
         // SPA reload doesn't immediately bounce to /login.
@@ -196,26 +202,22 @@ export const useSessionStore = defineStore('session', {
         this.hydrated = false
         return this.user !== null
       }
+    },
 
-      // /api/me said the cookie is good. Replay the cache.
-      const cached = readCachedSession()
-      if (!cached) {
-        // Cookie valid but no cache (eg. user cleared storage). Force
-        // re-login so the SPA can capture the LoginResponse again.
-        this.clear()
-        return false
-      }
-      this.user = cached.user
-      this.departments = cached.departments
-      const persisted = readActiveDept()
-      const persistedValid =
-        persisted && this.departments.some((d) => d.id === persisted)
-      this.activeDepartmentId = persistedValid
-        ? persisted
-        : this.departments[0]?.id ?? null
-      writeActiveDept(this.activeDepartmentId)
-      this.hydrated = true
-      return true
+    /**
+     * Force a refresh of the cached session state from the backend.
+     *
+     * Call this after admin mutations that change the current user's
+     * department memberships or role (eg. creating a department, granting
+     * a role, removing a member) so the SPA picks up the new state
+     * without requiring the user to log out and back in.
+     *
+     * Thin wrapper around hydrate() — kept as a named action so call
+     * sites read intentionally ("refresh the session") rather than as
+     * an unexplained re-hydrate.
+     */
+    async refresh(): Promise<boolean> {
+      return this.hydrate()
     },
 
     /**

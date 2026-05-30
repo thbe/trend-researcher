@@ -30,6 +30,10 @@ import {
   type Member,
 } from '@/api/departments'
 
+import { useSessionStore } from '@/stores/session'
+
+const session = useSessionStore()
+
 // ---------------------------------------------------------------------------
 // Tab state
 // ---------------------------------------------------------------------------
@@ -252,6 +256,10 @@ async function doCreateDept() {
     deptsSuccess.value = `Department "${deptForm.value.name}" created`
     createDeptDialog.value = false
     await loadDepartments()
+    // Superadmin sees ALL departments in the session payload — refresh
+    // so the new dept appears in the AppBar switcher + becomes available
+    // as a valid X-Active-Department value without a re-login.
+    await session.refresh()
   } catch (e: any) {
     deptsError.value = e.message || 'Failed to create department'
   } finally {
@@ -302,6 +310,9 @@ async function doDeleteDept() {
       members.value = []
     }
     await loadDepartments()
+    // Drop the deleted dept from the superadmin session payload + reselect
+    // an active dept if the deleted one was active.
+    await session.refresh()
   } catch (e: any) {
     deptsError.value = e.message || 'Failed to delete department'
   } finally {
@@ -319,6 +330,12 @@ async function doAddMember() {
       role: addMemberForm.value.role,
     })
     deptsSuccess.value = `Added ${addMemberForm.value.user.username}`
+    // If the admin just added themselves to this department, the session
+    // payload needs to gain the new role membership so subsequent calls
+    // resolve canEditDeptConfig / canAssess correctly.
+    if (addMemberForm.value.user.username === session.user?.username) {
+      await session.refresh()
+    }
     addMemberForm.value = { user: null, role: 'viewer' }
     await selectDept(selectedDept.value)
   } catch (e: any) {

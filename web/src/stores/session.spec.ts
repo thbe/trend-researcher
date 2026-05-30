@@ -2,8 +2,10 @@
 // Covers the three trickiest behaviours from CONTEXT discoveries:
 //   1. applyLoginResponse — caches user + departments and picks an
 //      active department (persisted-if-valid, else first).
-//   2. hydrate() — replays cache after /api/me liveness probe, and
-//      forces re-login when the cache is missing.
+//   2. hydrate() — reads the authoritative LoginResponse from /api/me and
+//      replays it through applyLoginResponse so the SPA self-heals after
+//      backend mutations. Falls back to the localStorage cache only on
+//      network failure.
 //   3. switchDepartment / RBAC getters — superadmin override and the
 //      analyst / dept_lead ordinal gates.
 
@@ -122,16 +124,25 @@ describe('session store', () => {
       expect(localStorage.getItem('session')).toBeNull()
     })
 
-    it('replays cache and returns true when /api/me is 200 with cache present', async () => {
+    it('replays /api/me payload as authoritative state when it returns 200', async () => {
+      // /api/me now returns the full LoginResponse so the SPA always picks
+      // up fresh server-side state (eg. newly created departments).
+      const freshPayload = loginPayload({
+        is_superadmin: true,
+        departments: [DEPT_A, DEPT_B, DEPT_C_VIEWER],
+      })
       vi.stubGlobal(
         'fetch',
-        vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 })),
+        vi.fn().mockResolvedValue(
+          new Response(JSON.stringify(freshPayload), { status: 200 }),
+        ),
       )
+      // Seed a STALE cache to prove /api/me wins over it.
       localStorage.setItem(
         'session',
         JSON.stringify({
           user: { username: 'tester', is_superadmin: false },
-          departments: [DEPT_A, DEPT_B],
+          departments: [DEPT_A],
         }),
       )
       localStorage.setItem('activeDepartment', DEPT_B.id)
@@ -140,22 +151,37 @@ describe('session store', () => {
       const ok = await s.hydrate()
 
       expect(ok).toBe(true)
-      expect(s.user?.username).toBe('tester')
-      expect(s.activeDepartmentId).toBe(DEPT_B.id)
+      expect(s.user).toEqual({ username: 'tester', is_superadmin: true })
+      expect(s.departments).toHaveLength(3)
+      expect(s.activeDepartmentId).toBe(DEPT_B.id) // persisted choice still valid
       expect(s.hydrated).toBe(true)
+      // Cache should now reflect the fresh payload, not the stale seed.
+      const cached = JSON.parse(localStorage.getItem('session')!)
+      expect(cached.user.is_superadmin).toBe(true)
+      expect(cached.departments).toHaveLength(3)
     })
 
-    it('returns false and clears when /api/me is 200 but the cache was wiped', async () => {
+    it('falls back to cached state on network failure', async () => {
       vi.stubGlobal(
         'fetch',
-        vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 })),
+        vi.fn().mockRejectedValue(new TypeError('Failed to fetch')),
       )
-      // No cache seeded.
+      localStorage.setItem(
+        'session',
+        JSON.stringify({
+          user: { username: 'tester', is_superadmin: false },
+          departments: [DEPT_A, DEPT_B],
+        }),
+      )
+      localStorage.setItem('activeDepartment', DEPT_A.id)
+
       const s = useSessionStore()
       const ok = await s.hydrate()
 
-      expect(ok).toBe(false)
-      expect(s.user).toBeNull()
+      expect(ok).toBe(true)
+      expect(s.user?.username).toBe('tester')
+      expect(s.activeDepartmentId).toBe(DEPT_A.id)
+      expect(s.hydrated).toBe(false)
     })
   })
 
