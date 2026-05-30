@@ -58,24 +58,15 @@ export function listBusinessCases(limit = 50, category?: string): Promise<Busine
   return request<BusinessCase[]>(url)
 }
 
-export async function assessBatch(frameworkId?: string | null): Promise<AssessJobResponse> {
+export function assessBatch(frameworkId?: string | null): Promise<AssessJobResponse> {
   // Phase 10 T06: forward-compatible framework_id. Backend may not yet
   // accept this field; unknown body keys are tolerated server-side.
-  const body = frameworkId ? JSON.stringify({ framework_id: frameworkId }) : undefined
-  const response = await fetch('/api/assess', {
+  // Must go through `request()` so X-Active-Department is injected — without
+  // it superadmin's POST 400s with "Active department required".
+  return request<AssessJobResponse>('/api/assess', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body,
+    body: frameworkId ? { framework_id: frameworkId } : {},
   })
-  if (!response.ok) {
-    let detail = `Assessment failed: ${response.status}`
-    try {
-      const body = await response.json()
-      if (body?.detail) detail = body.detail
-    } catch { /* ignore */ }
-    throw new Error(detail)
-  }
-  return response.json()
 }
 
 export function getJob(jobId: string): Promise<AssessJob> {
@@ -86,24 +77,18 @@ export function listJobs(limit = 10): Promise<AssessJob[]> {
   return request<AssessJob[]>(`/api/assess/jobs?limit=${limit}`)
 }
 
-export async function assessTopic(
+export function assessTopic(
   topicId: string,
   frameworkId?: string | null,
 ): Promise<Record<string, unknown>> {
   // Phase 10 T06: forward-compatible framework_id (see assessBatch).
-  const body = frameworkId ? JSON.stringify({ framework_id: frameworkId }) : undefined
-  const response = await fetch(`/api/assess/${encodeURIComponent(topicId)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body,
-  })
-  if (!response.ok) {
-    let detail = `Assessment failed: ${response.status}`
-    try {
-      const body = await response.json()
-      if (body?.detail) detail = body.detail
-    } catch { /* ignore */ }
-    throw new Error(detail)
-  }
-  return response.json()
+  // Goes through `request()` to inject X-Active-Department (required for
+  // superadmin who has no implicit dept).
+  return request<Record<string, unknown>>(
+    `/api/assess/${encodeURIComponent(topicId)}`,
+    {
+      method: 'POST',
+      body: frameworkId ? { framework_id: frameworkId } : {},
+    },
+  )
 }
